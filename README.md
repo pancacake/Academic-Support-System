@@ -1,4 +1,4 @@
-#Academic Support System
+# Academic Support System
 
 [![Python](https://img.shields.io/badge/Python-3.8+-blue.svg)](https://www.python.org/downloads/)
 [![Django](https://img.shields.io/badge/Django-5.2+-green.svg)](https://www.djangoproject.com/)
