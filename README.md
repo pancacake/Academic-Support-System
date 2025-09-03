@@ -48,7 +48,7 @@ Zhiwu Qiming Academic Support System is a comprehensive AI-driven learning assis
 1. **Clone Repository**
    ```bash
    git clone https://github.com/yourusername/zhiwu-qiming-academic-system.git
-   cd zhiwu-qiming-academic-system
+   cd academic_support_system
    ```
 
 2. **Create Virtual Environment**
