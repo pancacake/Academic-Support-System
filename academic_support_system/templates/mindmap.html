@@ -1,0 +1,2127 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>交互式思维导图 - Academic Support System</title>
+    {% load static %}
+    {% csrf_token %}
+    <script src="https://d3js.org/d3.v7.min.js"></script>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+        
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Noto Sans', Helvetica, Arial, sans-serif;
+            background: linear-gradient(135deg, #1a1a2e 0%, #16213e 25%, #0f3460 50%, #533483 75%, #2d1b69 100%);
+            min-height: 100vh;
+            color: #e8eaed;
+            margin: 0;
+            padding: 0;
+            position: relative;
+        }
+
+        /* 添加动态背景粒子效果 */
+        body::before {
+            content: '';
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background:
+                radial-gradient(circle at 20% 80%, rgba(120, 119, 198, 0.15) 0%, transparent 50%),
+                radial-gradient(circle at 80% 20%, rgba(255, 119, 198, 0.1) 0%, transparent 50%),
+                radial-gradient(circle at 40% 40%, rgba(120, 219, 255, 0.08) 0%, transparent 50%);
+            pointer-events: none;
+            z-index: -1;
+            animation: backgroundShift 20s ease-in-out infinite;
+        }
+
+        @keyframes backgroundShift {
+            0%, 100% { opacity: 1; }
+            50% { opacity: 0.7; }
+        }
+        
+        .topbar {
+            background: rgba(47, 47, 47, 0.8);
+            backdrop-filter: blur(20px);
+            -webkit-backdrop-filter: blur(20px);
+            padding: 1rem 2rem;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+            box-shadow: 0 4px 32px rgba(0, 0, 0, 0.3);
+        }
+        
+        .sysname {
+            font-size: 1.2rem;
+            font-weight: 600;
+            color: #ffffff;
+        }
+
+        .main-layout {
+            display: flex;
+            height: calc(100vh - 70px);
+        }
+
+        .sidebar {
+            width: 60px;
+            background: rgba(26, 26, 26, 0.8);
+            backdrop-filter: blur(20px);
+            -webkit-backdrop-filter: blur(20px);
+            border-right: 1px solid rgba(255, 255, 255, 0.1);
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            padding: 1rem 0;
+            transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+            overflow: hidden;
+            z-index: 50;
+            box-shadow: 4px 0 32px rgba(0, 0, 0, 0.2);
+        }
+
+        .sidebar:hover {
+            width: 200px;
+        }
+
+        .sidebar-item {
+            width: calc(100% - 1rem);
+            display: flex;
+            align-items: center;
+            padding: 0.75rem;
+            margin-bottom: 0.5rem;
+            cursor: pointer;
+            transition: all 0.2s ease;
+            color: #999;
+            text-decoration: none;
+            border-radius: 0.5rem;
+            margin: 0 0.5rem 0.5rem 0.5rem;
+        }
+
+        /* 默认状态下图标居中 */
+        .sidebar-item .sidebar-icon {
+            margin: 0 auto;
+        }
+
+        /* 展开时图标左对齐 */
+        .sidebar:hover .sidebar-item .sidebar-icon {
+            margin: 0;
+        }
+
+        .sidebar-item:hover {
+            background: #333;
+            color: #e8eaed;
+        }
+
+        .sidebar-item.active {
+            background: #0084ff;
+            color: white;
+        }
+
+        .sidebar-icon {
+            font-size: 1.2rem;
+            min-width: 24px;
+            text-align: center;
+        }
+
+        .sidebar-text {
+            margin-left: 1rem;
+            white-space: nowrap;
+            opacity: 0;
+            transition: opacity 0.3s ease;
+        }
+
+        .sidebar:hover .sidebar-text {
+            opacity: 1;
+        }
+        
+        .nav-links {
+            display: flex;
+            gap: 1rem;
+        }
+        
+        .nav-link {
+            color: white;
+            text-decoration: none;
+            padding: 0.5rem 1rem;
+            border-radius: 0.5rem;
+            transition: all 0.3s ease;
+            background: rgba(255, 255, 255, 0.1);
+        }
+        
+        .nav-link:hover {
+            background: rgba(255, 255, 255, 0.2);
+            transform: translateY(-2px);
+        }
+        
+        .container {
+            display: flex;
+            flex: 1;
+            padding: 1rem;
+            gap: 1rem;
+        }
+        
+        .mindmap-sidebar {
+            width: 300px;
+            background: #2f2f2f;
+            border-right: 1px solid #404040;
+            padding: 1.5rem;
+            overflow-y: auto;
+        }
+
+        .mindmap-container {
+            flex: 1;
+            background: linear-gradient(135deg, #0f3460 0%, #16213e 50%, #1a1a2e 100%);
+            position: relative;
+            overflow: hidden;
+            border-radius: 1rem;
+            margin: 1rem;
+            margin-left: 0;
+            box-shadow: 0 8px 32px rgba(0, 0, 0, 0.3);
+        }
+        
+        .sidebar h3 {
+            margin-bottom: 1rem;
+            color: #90caf9;
+            font-size: 1.2rem;
+        }
+        
+        .control-group {
+            margin-bottom: 1.5rem;
+        }
+        
+        .control-group label {
+            display: block;
+            margin-bottom: 0.5rem;
+            font-weight: 500;
+        }
+        
+        .btn {
+            width: 100%;
+            padding: 0.5rem 0.75rem;
+            border: none;
+            border-radius: 0.75rem;
+            background: rgba(255, 255, 255, 0.1);
+            backdrop-filter: blur(10px);
+            -webkit-backdrop-filter: blur(10px);
+            color: white;
+            cursor: pointer;
+            transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+            margin-bottom: 0.5rem;
+            font-size: 0.85rem;
+            font-weight: 500;
+            border: 1px solid rgba(255, 255, 255, 0.2);
+            position: relative;
+            overflow: hidden;
+        }
+
+        .btn::before {
+            content: '';
+            position: absolute;
+            top: 0;
+            left: 0;
+            right: 0;
+            bottom: 0;
+            background: linear-gradient(135deg, rgba(255, 255, 255, 0.1), rgba(255, 255, 255, 0.05));
+            opacity: 0;
+            transition: opacity 0.3s ease;
+            border-radius: 0.75rem;
+        }
+
+        .btn:hover::before {
+            opacity: 1;
+        }
+
+        .btn:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 8px 25px rgba(0, 0, 0, 0.3);
+            border-color: rgba(255, 255, 255, 0.3);
+        }
+
+        .btn.primary {
+            background: linear-gradient(135deg, #0084ff, #0066cc);
+            border-color: rgba(0, 132, 255, 0.3);
+            box-shadow: 0 4px 16px rgba(0, 132, 255, 0.3);
+        }
+
+        .btn.primary:hover {
+            box-shadow: 0 8px 25px rgba(0, 132, 255, 0.4);
+        }
+        
+        .status {
+            padding: 0.75rem;
+            border-radius: 0.5rem;
+            margin-bottom: 1rem;
+            font-size: 0.9rem;
+        }
+        
+        .status.info {
+            background: rgba(33, 150, 243, 0.2);
+            border: 1px solid rgba(33, 150, 243, 0.3);
+        }
+        
+        .status.success {
+            background: rgba(76, 175, 80, 0.2);
+            border: 1px solid rgba(76, 175, 80, 0.3);
+        }
+        
+        .status.error {
+            background: rgba(244, 67, 54, 0.2);
+            border: 1px solid rgba(244, 67, 54, 0.3);
+        }
+        
+        #mindmap-svg {
+            width: 100%;
+            height: 100%;
+        }
+        
+        .node {
+            cursor: pointer;
+            transition: all 0.3s ease;
+        }
+        
+        .node text {
+            font-family: inherit;
+            font-size: 14px;
+            fill: #ffffff;
+            text-anchor: start;  /* 确保文字左对齐 */
+            dominant-baseline: middle;
+            pointer-events: none;
+            user-select: none;
+            /* 改善文字渲染质量 */
+            text-rendering: optimizeLegibility;
+            -webkit-font-smoothing: antialiased;
+            -moz-osx-font-smoothing: grayscale;
+            /* 防止文字被截断 */
+            white-space: nowrap;
+            overflow: visible;
+        }
+
+        .node-point {
+            pointer-events: none;
+        }
+        
+        .link {
+            fill: none;
+            stroke: rgba(255, 255, 255, 0.6);
+            stroke-width: 2px;
+        }
+        
+        .context-menu {
+            position: absolute;
+            background: rgba(0, 0, 0, 0.9);
+            border-radius: 0.5rem;
+            padding: 0.5rem 0;
+            min-width: 150px;
+            z-index: 1000;
+            display: none;
+            backdrop-filter: blur(10px);
+        }
+        
+        .context-menu-item {
+            padding: 0.5rem 1rem;
+            cursor: pointer;
+            transition: background 0.2s ease;
+            font-size: 0.9rem;
+        }
+        
+        .context-menu-item:hover {
+            background: rgba(255, 255, 255, 0.1);
+        }
+        
+        .loading {
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            height: 100%;
+            font-size: 1.2rem;
+            color: rgba(255, 255, 255, 0.7);
+        }
+        
+        .spinner {
+            width: 40px;
+            height: 40px;
+            border: 4px solid rgba(255, 255, 255, 0.3);
+            border-top: 4px solid #4CAF50;
+            border-radius: 50%;
+            animation: spin 1s linear infinite;
+            margin-right: 1rem;
+        }
+        
+        @keyframes spin {
+            0% { transform: rotate(0deg); }
+            100% { transform: rotate(360deg); }
+        }
+        
+        .node-editor {
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            background: rgba(0, 0, 0, 0.9);
+            padding: 2rem;
+            border-radius: 1rem;
+            min-width: 300px;
+            z-index: 1001;
+            display: none;
+            backdrop-filter: blur(10px);
+        }
+        
+        .node-editor input {
+            width: 100%;
+            padding: 0.75rem;
+            border: 1px solid rgba(255, 255, 255, 0.3);
+            border-radius: 0.5rem;
+            background: rgba(255, 255, 255, 0.1);
+            color: white;
+            margin-bottom: 1rem;
+        }
+        
+        .node-editor input::placeholder {
+            color: rgba(255, 255, 255, 0.5);
+        }
+        
+        .node-editor .btn-group {
+            display: flex;
+            gap: 0.5rem;
+        }
+        
+        .node-editor .btn {
+            flex: 1;
+            margin-bottom: 0;
+        }
+
+        /* 布局模式选择器 */
+        .layout-modes {
+            display: flex;
+            flex-direction: column;
+            gap: 0.5rem;
+        }
+
+        .layout-mode {
+            display: flex;
+            align-items: center;
+            padding: 0.5rem;
+            border-radius: 0.5rem;
+            background: rgba(255, 255, 255, 0.05);
+            border: 1px solid rgba(255, 255, 255, 0.1);
+            cursor: pointer;
+            transition: all 0.3s ease;
+            font-size: 0.8rem;
+        }
+
+        .layout-mode:hover {
+            background: rgba(255, 255, 255, 0.1);
+            border-color: rgba(255, 255, 255, 0.2);
+            transform: translateX(2px);
+        }
+
+        .layout-mode.active {
+            background: rgba(0, 132, 255, 0.2);
+            border-color: rgba(0, 132, 255, 0.4);
+            color: #4fc3f7;
+        }
+
+        .layout-icon {
+            width: 24px;
+            height: 24px;
+            margin-right: 0.5rem;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            color: inherit;
+        }
+
+        .layout-icon svg {
+            width: 100%;
+            height: 100%;
+        }
+    </style>
+</head>
+<body>
+    <div class="topbar">
+        <div class="sysname">知悟·启明学业问答系统 - 思维导图</div>
+        <div class="nav-links">
+            <a href="#" class="nav-link" onclick="exportMindmap()">导出JSON</a>
+            <a href="#" class="nav-link" onclick="exportAsPNG()">导出图片</a>
+            <span id="userStatus" style="color: #e8eaed; margin-left: 1rem;">欢迎使用学术支持系统</span>
+            <a href="/users/login/" id="loginLink" style="color: #4fc3f7; text-decoration: none; margin-left: 1rem; padding: 0.5rem 1rem; background: rgba(79, 195, 247, 0.1); border-radius: 0.5rem; border: 1px solid rgba(79, 195, 247, 0.3); transition: all 0.3s ease;" onmouseover="this.style.background='rgba(79, 195, 247, 0.2)'" onmouseout="this.style.background='rgba(79, 195, 247, 0.1)'">登录</a>
+        </div>
+    </div>
+
+    <div class="main-layout">
+        <div class="sidebar">
+            <a href="/" class="sidebar-item">
+                <div class="sidebar-icon">💬</div>
+                <div class="sidebar-text">聊天</div>
+            </a>
+            <a href="/mindmap/" class="sidebar-item active">
+                <div class="sidebar-icon">🧠</div>
+                <div class="sidebar-text">思维导图</div>
+            </a>
+            <a href="/questions/" class="sidebar-item">
+                <div class="sidebar-icon">📝</div>
+                <div class="sidebar-text">智能出题</div>
+            </a>
+        </div>
+
+        <div class="container">
+        <div class="mindmap-sidebar">
+            <h3>🧠 思维导图控制</h3>
+            
+            <div class="control-group">
+                <button class="btn primary" onclick="console.log('按钮被点击'); loadLatestNotes()">📚 加载最新笔记</button>
+                <button class="btn" onclick="resetView()">🔄 重置视图</button>
+                <button class="btn" onclick="resetLayout()" style="background-color: #ff6b6b;">🎯 重新整理布局</button>
+                <button class="btn" onclick="expandAll()">📖 展开全部</button>
+                <button class="btn" onclick="collapseAll()">📕 收起全部</button>
+            </div>
+
+            <div class="control-group">
+                <h4 style="margin-bottom: 0.75rem; font-size: 0.9rem; color: #e8eaed;">🔍 搜索节点</h4>
+                <input type="text" id="search-input" placeholder="输入关键词搜索节点..."
+                       style="width: 100%; padding: 0.5rem; border: 1px solid #555; border-radius: 6px; background: #333; color: #fff; margin-bottom: 0.5rem;"
+                       onkeyup="searchNodes(this.value)">
+                <button class="btn" onclick="clearSearch()">清除搜索</button>
+            </div>
+
+            <div class="control-group">
+                <h4 style="margin-bottom: 0.75rem; font-size: 0.9rem; color: #e8eaed;">🎨 布局模式</h4>
+                <div class="layout-modes">
+                    <div class="layout-mode" onclick="setLayoutMode('horizontal')" data-mode="horizontal">
+                        <div class="layout-icon">
+                            <svg width="24" height="16" viewBox="0 0 24 16" fill="none">
+                                <circle cx="4" cy="8" r="2" fill="currentColor"/>
+                                <circle cx="12" cy="4" r="2" fill="currentColor"/>
+                                <circle cx="12" cy="12" r="2" fill="currentColor"/>
+                                <circle cx="20" cy="8" r="2" fill="currentColor"/>
+                                <line x1="6" y1="8" x2="10" y2="4" stroke="currentColor" stroke-width="1"/>
+                                <line x1="6" y1="8" x2="10" y2="12" stroke="currentColor" stroke-width="1"/>
+                                <line x1="14" y1="4" x2="18" y2="8" stroke="currentColor" stroke-width="1"/>
+                                <line x1="14" y1="12" x2="18" y2="8" stroke="currentColor" stroke-width="1"/>
+                            </svg>
+                        </div>
+                        <span>水平树状</span>
+                    </div>
+                    <div class="layout-mode" onclick="setLayoutMode('vertical')" data-mode="vertical">
+                        <div class="layout-icon">
+                            <svg width="16" height="24" viewBox="0 0 16 24" fill="none">
+                                <circle cx="8" cy="4" r="2" fill="currentColor"/>
+                                <circle cx="4" cy="12" r="2" fill="currentColor"/>
+                                <circle cx="12" cy="12" r="2" fill="currentColor"/>
+                                <circle cx="8" cy="20" r="2" fill="currentColor"/>
+                                <line x1="8" y1="6" x2="4" y2="10" stroke="currentColor" stroke-width="1"/>
+                                <line x1="8" y1="6" x2="12" y2="10" stroke="currentColor" stroke-width="1"/>
+                                <line x1="4" y1="14" x2="8" y2="18" stroke="currentColor" stroke-width="1"/>
+                                <line x1="12" y1="14" x2="8" y2="18" stroke="currentColor" stroke-width="1"/>
+                            </svg>
+                        </div>
+                        <span>垂直树状</span>
+                    </div>
+                    <div class="layout-mode active" onclick="setLayoutMode('radial')" data-mode="radial">
+                        <div class="layout-icon">
+                            <svg width="24" height="24" viewBox="0 0 24 24" fill="none">
+                                <circle cx="12" cy="12" r="2" fill="currentColor"/>
+                                <circle cx="12" cy="4" r="1.5" fill="currentColor"/>
+                                <circle cx="20" cy="12" r="1.5" fill="currentColor"/>
+                                <circle cx="12" cy="20" r="1.5" fill="currentColor"/>
+                                <circle cx="4" cy="12" r="1.5" fill="currentColor"/>
+                                <line x1="12" y1="10" x2="12" y2="5.5" stroke="currentColor" stroke-width="1"/>
+                                <line x1="14" y1="12" x2="18.5" y2="12" stroke="currentColor" stroke-width="1"/>
+                                <line x1="12" y1="14" x2="12" y2="18.5" stroke="currentColor" stroke-width="1"/>
+                                <line x1="10" y1="12" x2="5.5" y2="12" stroke="currentColor" stroke-width="1"/>
+                            </svg>
+                        </div>
+                        <span>辐射状</span>
+                    </div>
+                </div>
+            </div>
+
+            <div class="control-group">
+                <h4 style="margin-bottom: 0.75rem; font-size: 0.9rem; color: #e8eaed;">🎨 节点样式</h4>
+                <p style="font-size: 0.85rem; color: #999; line-height: 1.4;">
+                    右键点击任意节点，选择"编辑样式"来自定义该节点的颜色、字体大小、粗细和斜体等样式。
+                </p>
+            </div>
+
+            <div id="status" class="status info">
+                点击"加载最新笔记"开始生成思维导图
+            </div>
+            
+            <div class="control-group">
+                <h4 style="margin-bottom: 0.5rem;">📖 操作说明</h4>
+                <ul style="font-size: 0.85rem; line-height: 1.6; padding-left: 1rem; color: #ccc;">
+                    <li><strong>点击节点</strong>：展开/收起子节点</li>
+                    <li><strong>双击节点</strong>：快速编辑节点名称</li>
+                    <li><strong>右键节点</strong>：打开菜单进行编辑、样式设置等</li>
+                    <li><strong>拖拽节点</strong>：调整节点位置</li>
+                    <li><strong>搜索功能</strong>：输入关键词高亮匹配节点</li>
+                    <li><strong>滚轮缩放</strong>：放大/缩小思维导图</li>
+                </ul>
+                <h5 style="margin: 1rem 0 0.5rem 0; font-size: 0.8rem; color: #999;">⌨️ 快捷键</h5>
+                <ul style="font-size: 0.8rem; line-height: 1.4; padding-left: 1rem; color: #999;">
+                    <li><strong>Ctrl+L</strong>：加载最新笔记</li>
+                    <li><strong>Ctrl+E</strong>：展开全部节点</li>
+                    <li><strong>Ctrl+R</strong>：收起全部节点</li>
+                    <li><strong>Ctrl+F</strong>：聚焦搜索框</li>
+                    <li><strong>Esc</strong>：清除搜索高亮</li>
+                </ul>
+            </div>
+        </div>
+        
+        <div class="mindmap-container">
+            <div id="loading" class="loading" style="display: none;">
+                <div class="spinner"></div>
+                正在生成思维导图...
+            </div>
+            <svg id="mindmap-svg"></svg>
+        </div>
+    </div>
+    </div>
+
+    <!-- 右键菜单 -->
+    <div id="context-menu" class="context-menu">
+        <div class="context-menu-item" onclick="editNode()">✏️ 编辑节点</div>
+        <div class="context-menu-item" onclick="editNodeStyle()">🎨 编辑样式</div>
+        <div class="context-menu-item" onclick="addChildNode()">➕ 添加子节点</div>
+        <div class="context-menu-item" onclick="deleteNode()">🗑️ 删除节点</div>
+        <div class="context-menu-item" onclick="generateAIContent()">🤖 AI优化</div>
+    </div>
+    
+    <!-- 节点编辑器 -->
+    <div id="node-editor" class="node-editor">
+        <h4 style="margin-bottom: 1rem;">编辑节点</h4>
+        <input type="text" id="node-name-input" placeholder="输入节点名称">
+        <div class="btn-group">
+            <button class="btn primary" onclick="saveNodeEdit()">保存</button>
+            <button class="btn" onclick="cancelNodeEdit()">取消</button>
+        </div>
+    </div>
+
+    <!-- 节点样式编辑器 -->
+    <div id="node-style-editor" class="node-editor" style="display: none;">
+        <h4 style="margin-bottom: 1rem;">🎨 编辑节点样式</h4>
+
+        <div style="margin-bottom: 1rem;">
+            <label style="display: block; margin-bottom: 0.5rem; font-size: 0.9rem;">文字颜色</label>
+            <input type="color" id="node-text-color" value="#ffffff" style="width: 100%; height: 40px; border: none; border-radius: 6px; cursor: pointer;">
+        </div>
+
+        <div style="margin-bottom: 1rem;">
+            <label style="display: block; margin-bottom: 0.5rem; font-size: 0.9rem;">字体大小</label>
+            <input type="range" id="node-font-size" min="10" max="24" value="14" style="width: 100%;">
+            <span id="node-font-size-value" style="font-size: 0.8rem; color: #999;">14px</span>
+        </div>
+
+        <div style="margin-bottom: 1rem;">
+            <label style="display: block; margin-bottom: 0.5rem; font-size: 0.9rem;">字体粗细</label>
+            <select id="node-font-weight" style="width: 100%; padding: 0.5rem; border: 1px solid #555; border-radius: 6px; background: #333; color: #fff;">
+                <option value="normal">正常</option>
+                <option value="bold">粗体</option>
+                <option value="lighter">细体</option>
+            </select>
+        </div>
+
+        <div style="margin-bottom: 1rem;">
+            <label style="display: flex; align-items: center; font-size: 0.9rem;">
+                <input type="checkbox" id="node-font-italic" style="margin-right: 0.5rem;">
+                斜体
+            </label>
+        </div>
+
+        <div style="margin-bottom: 1rem;">
+            <label style="display: block; margin-bottom: 0.5rem; font-size: 0.9rem;">底线颜色</label>
+            <input type="color" id="node-underline-color" value="#81c784" style="width: 100%; height: 40px; border: none; border-radius: 6px; cursor: pointer;">
+        </div>
+
+        <div class="btn-group">
+            <button class="btn primary" onclick="saveNodeStyle()">保存样式</button>
+            <button class="btn" onclick="cancelNodeStyleEdit()">取消</button>
+        </div>
+    </div>
+    
+    <script>
+        // 全局变量
+        let mindmapData = null;
+        let currentNode = null;
+        let svg, g, tree, root;
+        let width = 800, height = 600;
+        let currentLayout = 'horizontal'; // 'horizontal', 'vertical', 'radial'
+        let nodeColors = ['#0084ff', '#ff6b35', '#4CAF50', '#9C27B0', '#FF9800', '#F44336'];
+        let i = 0; // 节点ID计数器
+        let isPerformanceMode = false; // 性能模式标志
+        
+        // 初始化SVG
+        function initSVG() {
+            const container = document.querySelector('.mindmap-container');
+            width = container.clientWidth;
+            height = container.clientHeight;
+
+            svg = d3.select("#mindmap-svg")
+                .attr("width", width)
+                .attr("height", height);
+            g = svg.append("g");
+
+            // 添加缩放和拖拽
+            const zoom = d3.zoom()
+                .scaleExtent([0.1, 3])
+                .on("zoom", (event) => {
+                    g.attr("transform", event.transform);
+                });
+
+            svg.call(zoom);
+
+            // 初始化树布局
+            tree = d3.tree().size([height - 100, width - 200]);
+        }
+        
+        // 设置布局模式
+        function setLayoutMode(mode) {
+            currentLayout = mode;
+
+            // 更新UI状态
+            document.querySelectorAll('.layout-mode').forEach(el => {
+                el.classList.remove('active');
+            });
+            document.querySelector(`[data-mode="${mode}"]`).classList.add('active');
+
+            // 重新渲染思维导图
+            if (mindmapData) {
+                renderMindmap(mindmapData);
+            }
+        }
+
+        // 获取节点颜色
+        function getNodeColor(depth) {
+            return nodeColors[depth % nodeColors.length];
+        }
+
+        // 检查用户登录状态
+        async function checkUserStatus() {
+            try {
+                const response = await fetch('/users/api/current-user/');
+                const data = await response.json();
+
+                if (data.success && data.user.is_authenticated) {
+                    document.getElementById('userStatus').textContent = `欢迎，${data.user.username}`;
+                    document.getElementById('loginLink').textContent = '退出';
+                    document.getElementById('loginLink').href = '#';
+                    document.getElementById('loginLink').onclick = logout;
+                } else {
+                    document.getElementById('userStatus').textContent = '游客模式';
+                    document.getElementById('loginLink').textContent = '登录';
+                    document.getElementById('loginLink').href = '/users/login/';
+                    document.getElementById('loginLink').onclick = null;
+                }
+            } catch (error) {
+                console.error('检查用户状态失败:', error);
+            }
+        }
+
+        // 退出登录
+        async function logout() {
+            try {
+                const response = await fetch('/users/api/logout/', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                    }
+                });
+
+                const data = await response.json();
+                if (data.success) {
+                    window.location.reload();
+                }
+            } catch (error) {
+                console.error('退出登录失败:', error);
+            }
+        }
+
+        // 页面加载完成后初始化
+        document.addEventListener('DOMContentLoaded', function() {
+            console.log('页面加载完成，开始初始化...');
+            initSVG();
+            updateStatus('准备就绪', 'info');
+            checkUserStatus();
+
+            // 测试函数是否可用
+            console.log('loadLatestNotes函数:', typeof loadLatestNotes);
+            console.log('updateStatus函数:', typeof updateStatus);
+
+            // 将函数添加到全局window对象，确保可以被onclick访问
+            window.loadLatestNotes = loadLatestNotes;
+
+            // 添加键盘快捷键支持
+            document.addEventListener('keydown', function(event) {
+                // Ctrl+L: 加载最新笔记
+                if (event.ctrlKey && event.key === 'l') {
+                    event.preventDefault();
+                    loadLatestNotes();
+                }
+                // Ctrl+E: 展开全部
+                else if (event.ctrlKey && event.key === 'e') {
+                    event.preventDefault();
+                    expandAll();
+                }
+                // Ctrl+R: 收起全部
+                else if (event.ctrlKey && event.key === 'r') {
+                    event.preventDefault();
+                    collapseAll();
+                }
+                // Ctrl+F: 聚焦搜索框
+                else if (event.ctrlKey && event.key === 'f') {
+                    event.preventDefault();
+                    document.getElementById('search-input').focus();
+                }
+                // Escape: 清除搜索
+                else if (event.key === 'Escape') {
+                    clearSearch();
+                }
+            });
+        });
+
+        // 更新状态显示
+        function updateStatus(message, type = 'info') {
+            const statusDiv = document.getElementById('status');
+            statusDiv.textContent = message;
+            statusDiv.className = `status ${type}`;
+        }
+
+        // 加载最新笔记 - 移到全局作用域
+        async function loadLatestNotes() {
+            console.log('开始加载最新笔记...');
+            try {
+                updateStatus('正在加载最新笔记...', 'info');
+                document.getElementById('loading').style.display = 'flex';
+
+                console.log('发送请求到: /api/mindmap/latest-notes/');
+                const response = await fetch('/api/mindmap/latest-notes/');
+                console.log('响应状态:', response.status);
+
+                if (!response.ok) {
+                    throw new Error(`HTTP错误: ${response.status}`);
+                }
+
+                const data = await response.json();
+                console.log('获取到的数据:', data);
+
+                if (!data.success) {
+                    throw new Error(data.error);
+                }
+
+                console.log('开始解析笔记内容...');
+                // 解析笔记为思维导图
+                const parseResponse = await fetch('/api/mindmap/parse/', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                        'X-CSRFToken': getCookie('csrftoken') || ''
+                    },
+                    body: JSON.stringify({
+                        content: data.content
+                    })
+                });
+
+                console.log('解析响应状态:', parseResponse.status);
+
+                if (!parseResponse.ok) {
+                    throw new Error(`解析请求失败: ${parseResponse.status}`);
+                }
+
+                const parseData = await parseResponse.json();
+                console.log('解析结果:', parseData);
+
+                if (!parseData.success) {
+                    throw new Error(parseData.error);
+                }
+
+                mindmapData = parseData.mindmap_data;
+                console.log('思维导图数据:', mindmapData);
+
+                renderMindmap(mindmapData);
+                updateStatus('思维导图加载成功', 'success');
+
+            } catch (error) {
+                updateStatus(`加载失败: ${error.message}`, 'error');
+                console.error('Error loading notes:', error);
+            } finally {
+                document.getElementById('loading').style.display = 'none';
+            }
+        }
+
+        // 获取CSRF token的辅助函数
+        function getCookie(name) {
+            let cookieValue = null;
+            if (document.cookie && document.cookie !== '') {
+                const cookies = document.cookie.split(';');
+                for (let i = 0; i < cookies.length; i++) {
+                    const cookie = cookies[i].trim();
+                    if (cookie.substring(0, name.length + 1) === (name + '=')) {
+                        cookieValue = decodeURIComponent(cookie.substring(name.length + 1));
+                        break;
+                    }
+                }
+            }
+            return cookieValue;
+        }
+        
+        // 渲染思维导图
+        function renderMindmap(data) {
+            // 清除现有内容
+            g.selectAll("*").remove();
+
+            // 为每个节点添加默认样式属性
+            function addDefaultStyles(node) {
+                if (!node.style) {
+                    node.style = {
+                        textColor: '#ffffff',
+                        fontSize: 14,
+                        fontWeight: 'normal',
+                        fontItalic: false,
+                        underlineColor: '#81c784'
+                    };
+                }
+                if (node.children) {
+                    node.children.forEach(addDefaultStyles);
+                }
+            }
+            addDefaultStyles(data);
+
+            // 统计节点数量
+            function countNodes(node) {
+                let count = 1;
+                if (node.children) {
+                    node.children.forEach(child => {
+                        count += countNodes(child);
+                    });
+                }
+                return count;
+            }
+            const totalNodes = countNodes(data);
+
+            // 创建层次结构
+            root = d3.hierarchy(data);
+            root.x0 = height / 2;
+            root.y0 = 0;
+
+            // 初始化节点状态
+            if (root.children) {
+                root.children.forEach(collapse);
+            }
+
+            update(root);
+
+            // 更新状态显示节点数量
+            updateStatus(`思维导图已加载，共 ${totalNodes} 个节点`, 'success');
+        }
+        
+        // 收起节点
+        function collapse(d) {
+            if (d.children) {
+                d._children = d.children;
+                d._children.forEach(collapse);
+                d.children = null;
+            }
+        }
+        
+        // 计算节点文本宽度
+        function getTextWidth(text, fontSize = 14) {
+            const canvas = document.createElement('canvas');
+            const context = canvas.getContext('2d');
+            context.font = `${fontSize}px -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif`;
+            return context.measureText(text).width;
+        }
+
+        // 计算动画持续时间
+        function calculateAnimationDuration(nodeCount) {
+            // 根据节点数量动态调整动画时间
+            const baseDuration = 600;
+            const maxDuration = 1200;
+            const minDuration = 200;
+
+            if (nodeCount <= 10) return baseDuration;
+            if (nodeCount >= 100) return minDuration;
+
+            // 节点越多，动画越快，避免等待时间过长
+            const factor = 1 - (nodeCount - 10) / 90;
+            return Math.max(minDuration, baseDuration * factor);
+        }
+
+        // 性能检测和优化
+        function checkPerformanceMode(nodeCount) {
+            const previousMode = isPerformanceMode;
+            isPerformanceMode = nodeCount > 80;
+
+            if (isPerformanceMode && !previousMode) {
+                updateStatus('节点较多，已启用性能模式', 'info');
+            } else if (!isPerformanceMode && previousMode) {
+                updateStatus('已退出性能模式', 'info');
+            }
+
+            return isPerformanceMode;
+        }
+
+        // 性能优化的节点渲染
+        function optimizeNodeRendering(nodeSelection) {
+            if (isPerformanceMode) {
+                // 性能模式：简化渲染
+                nodeSelection.select('circle')
+                    .style('filter', null) // 移除阴影效果
+                    .style('stroke-width', 1);
+
+                nodeSelection.select('text')
+                    .style('text-shadow', null); // 移除文字阴影
+            } else {
+                // 正常模式：完整渲染
+                nodeSelection.select('circle')
+                    .style('filter', 'drop-shadow(0 2px 4px rgba(0,0,0,0.1))')
+                    .style('stroke-width', 2);
+
+                nodeSelection.select('text')
+                    .style('text-shadow', '0 1px 2px rgba(0,0,0,0.1)');
+            }
+        }
+
+        // 计算动态间距 - 全局智能计算
+        function calculateDynamicSpacing() {
+            if (!root) return { horizontal: 200, vertical: 80 };
+
+            const allNodes = root.descendants();
+            let maxTextWidth = 0;
+            let avgTextWidth = 0;
+            let totalWidth = 0;
+            let maxDepth = 0;
+
+            allNodes.forEach(d => {
+                const fontSize = d.data.style ? d.data.style.fontSize : 14;
+                const textWidth = getTextWidth(d.data.name, fontSize);
+                maxTextWidth = Math.max(maxTextWidth, textWidth);
+                totalWidth += textWidth;
+                maxDepth = Math.max(maxDepth, d.depth);
+            });
+
+            avgTextWidth = totalWidth / allNodes.length;
+
+            // 智能间距计算：考虑文本长度、节点数量和深度
+            const baseHorizontal = Math.max(maxTextWidth + 120, 200);
+            const baseVertical = Math.max(avgTextWidth / 4 + 50, 70);
+
+            // 根据节点数量调整间距
+            const nodeCountFactor = Math.min(allNodes.length / 20, 2);
+            const depthFactor = Math.min(maxDepth / 5, 1.5);
+
+            return {
+                horizontal: baseHorizontal * (1 + depthFactor * 0.3),
+                vertical: baseVertical * (1 + nodeCountFactor * 0.2)
+            };
+        }
+
+        // 平衡水平布局算法
+        function balanceHorizontalLayout(nodes) {
+            // 按深度分组节点
+            const nodesByDepth = {};
+            nodes.forEach(d => {
+                if (!nodesByDepth[d.depth]) nodesByDepth[d.depth] = [];
+                nodesByDepth[d.depth].push(d);
+            });
+
+            // 对每个深度级别进行平衡
+            Object.keys(nodesByDepth).forEach(depth => {
+                const levelNodes = nodesByDepth[depth];
+                if (levelNodes.length <= 1) return;
+
+                // 按父节点分组
+                const nodesByParent = {};
+                levelNodes.forEach(node => {
+                    const parentId = node.parent ? node.parent.id || 'root' : 'root';
+                    if (!nodesByParent[parentId]) nodesByParent[parentId] = [];
+                    nodesByParent[parentId].push(node);
+                });
+
+                // 为每个父节点的子节点创建均匀分布
+                Object.values(nodesByParent).forEach(siblings => {
+                    if (siblings.length <= 1) return;
+
+                    // 计算父节点位置（如果有的话）
+                    const parentX = siblings[0].parent ? siblings[0].parent.x : height / 2;
+
+                    // 根据兄弟节点数量计算间距
+                    const siblingCount = siblings.length;
+                    const totalSpread = Math.min(siblingCount * 80, height * 0.6); // 限制总展开范围
+                    const spacing = totalSpread / Math.max(siblingCount - 1, 1);
+
+                    // 计算起始位置，使节点围绕父节点居中分布
+                    const startX = parentX - totalSpread / 2;
+
+                    // 按原始位置排序以保持相对顺序
+                    siblings.sort((a, b) => a.x - b.x);
+
+                    // 重新分配位置
+                    siblings.forEach((node, index) => {
+                        node.x = startX + index * spacing;
+                    });
+                });
+            });
+
+            // 检测并解决跨父节点的子树重叠
+            resolveSubtreeOverlaps(nodes);
+        }
+
+        // 检测并解决跨父节点的子树重叠
+        function resolveSubtreeOverlaps(nodes) {
+            // 按深度分组节点
+            const nodesByDepth = {};
+            nodes.forEach(d => {
+                if (!nodesByDepth[d.depth]) nodesByDepth[d.depth] = [];
+                nodesByDepth[d.depth].push(d);
+            });
+
+            // 从第二层开始检查（第一层是根节点）
+            const depths = Object.keys(nodesByDepth).map(d => parseInt(d)).sort((a, b) => a - b);
+
+            for (let i = 1; i < depths.length; i++) {
+                const currentDepth = depths[i];
+                const currentLevelNodes = nodesByDepth[currentDepth];
+
+                if (currentLevelNodes.length <= 1) continue;
+
+                // 按父节点分组当前层级的节点
+                const subtreesByParent = {};
+                currentLevelNodes.forEach(node => {
+                    const parentId = node.parent ? node.parent.id || 'root' : 'root';
+                    if (!subtreesByParent[parentId]) {
+                        subtreesByParent[parentId] = {
+                            parent: node.parent,
+                            nodes: []
+                        };
+                    }
+                    subtreesByParent[parentId].nodes.push(node);
+                });
+
+                // 获取所有子树的边界
+                const subtrees = Object.values(subtreesByParent).map(subtree => {
+                    const nodes = subtree.nodes;
+                    const minX = Math.min(...nodes.map(n => n.x));
+                    const maxX = Math.max(...nodes.map(n => n.x));
+                    return {
+                        parent: subtree.parent,
+                        nodes: nodes,
+                        minX: minX,
+                        maxX: maxX,
+                        centerX: (minX + maxX) / 2,
+                        height: maxX - minX
+                    };
+                });
+
+                // 按父节点的垂直位置排序子树
+                subtrees.sort((a, b) => {
+                    const aParentX = a.parent ? a.parent.x : height / 2;
+                    const bParentX = b.parent ? b.parent.x : height / 2;
+                    return aParentX - bParentX;
+                });
+
+                // 检测并解决子树重叠 - 通过调整父节点间距
+                const minSubtreeGap = 40; // 子树之间的最小间距
+                const parentAdjustments = []; // 记录需要调整的父节点
+
+                for (let j = 1; j < subtrees.length; j++) {
+                    const currentSubtree = subtrees[j];
+                    const previousSubtree = subtrees[j - 1];
+
+                    // 检查是否重叠
+                    const overlap = previousSubtree.maxX + minSubtreeGap - currentSubtree.minX;
+                    if (overlap > 0) {
+                        // 计算需要调整父节点的距离
+                        const parentMoveDistance = overlap * 0.8; // 父节点移动距离稍小一些
+
+                        // 记录需要调整的父节点
+                        if (currentSubtree.parent) {
+                            parentAdjustments.push({
+                                parent: currentSubtree.parent,
+                                moveDistance: parentMoveDistance,
+                                subtreeIndex: j
+                            });
+                        }
+                    }
+                }
+
+                // 应用父节点调整
+                parentAdjustments.forEach(adjustment => {
+                    // 移动父节点及其所有后续兄弟节点
+                    const parentDepth = adjustment.parent.depth;
+                    const parentLevelNodes = nodesByDepth[parentDepth];
+
+                    if (parentLevelNodes) {
+                        // 按垂直位置排序父节点
+                        parentLevelNodes.sort((a, b) => a.x - b.x);
+
+                        // 找到当前父节点的位置
+                        const parentIndex = parentLevelNodes.findIndex(node => node === adjustment.parent);
+
+                        // 移动当前父节点及其后续所有兄弟节点
+                        for (let k = parentIndex; k < parentLevelNodes.length; k++) {
+                            const nodeToMove = parentLevelNodes[k];
+                            nodeToMove.x += adjustment.moveDistance;
+
+                            // 同时移动该父节点的所有子孙节点
+                            moveDescendants(nodeToMove, adjustment.moveDistance);
+                        }
+                    }
+                });
+            }
+        }
+
+        // 移动节点的所有子孙节点
+        function moveDescendants(node, moveDistance) {
+            if (node.children) {
+                node.children.forEach(child => {
+                    child.x += moveDistance;
+                    moveDescendants(child, moveDistance); // 递归移动子孙节点
+                });
+            }
+            if (node._children) {
+                node._children.forEach(child => {
+                    child.x += moveDistance;
+                    moveDescendants(child, moveDistance); // 递归移动折叠的子孙节点
+                });
+            }
+        }
+
+        // 调整父节点位置以保持与子节点的平衡
+        function adjustParentPositions(subtrees) {
+            subtrees.forEach(subtree => {
+                if (subtree.parent && subtree.nodes.length > 0) {
+                    // 计算子节点的中心位置
+                    const childrenCenterX = subtree.nodes.reduce((sum, node) => sum + node.x, 0) / subtree.nodes.length;
+
+                    // 如果父节点位置与子节点中心相差太大，进行微调
+                    const maxAdjustment = 30; // 最大调整距离
+                    const desiredAdjustment = childrenCenterX - subtree.parent.x;
+                    const actualAdjustment = Math.max(-maxAdjustment, Math.min(maxAdjustment, desiredAdjustment));
+
+                    if (Math.abs(actualAdjustment) > 5) { // 只有当调整距离足够大时才进行调整
+                        subtree.parent.x += actualAdjustment * 0.3; // 使用较小的调整系数以避免过度调整
+                    }
+                }
+            });
+        }
+
+        // 检测并解决垂直重叠（水平布局）
+        function resolveVerticalOverlaps(nodes) {
+            const nodesByDepth = {};
+            nodes.forEach(d => {
+                if (!nodesByDepth[d.depth]) nodesByDepth[d.depth] = [];
+                nodesByDepth[d.depth].push(d);
+            });
+
+            Object.values(nodesByDepth).forEach(levelNodes => {
+                if (levelNodes.length <= 1) return;
+
+                // 按垂直位置排序
+                levelNodes.sort((a, b) => a.x - b.x);
+
+                // 计算原始中心位置
+                const originalCenter = levelNodes.reduce((sum, node) => sum + node.x, 0) / levelNodes.length;
+
+                // 检测重叠并调整位置
+                for (let i = 1; i < levelNodes.length; i++) {
+                    const current = levelNodes[i];
+                    const previous = levelNodes[i - 1];
+                    const minDistance = 60; // 最小垂直距离
+
+                    if (current.x - previous.x < minDistance) {
+                        current.x = previous.x + minDistance;
+                    }
+                }
+
+                // 重新计算中心位置并保持相对于原始中心的位置
+                const newCenter = levelNodes.reduce((sum, node) => sum + node.x, 0) / levelNodes.length;
+                const centerOffset = originalCenter - newCenter;
+                levelNodes.forEach(node => {
+                    node.x += centerOffset;
+                });
+            });
+        }
+
+        // 检测并解决水平重叠（垂直布局）
+        function resolveHorizontalOverlaps(nodes) {
+            const nodesByDepth = {};
+            nodes.forEach(d => {
+                if (!nodesByDepth[d.depth]) nodesByDepth[d.depth] = [];
+                nodesByDepth[d.depth].push(d);
+            });
+
+            Object.values(nodesByDepth).forEach(levelNodes => {
+                if (levelNodes.length <= 1) return;
+
+                // 按水平位置排序
+                levelNodes.sort((a, b) => a.y - b.y);
+
+                // 计算原始中心位置
+                const originalCenter = levelNodes.reduce((sum, node) => sum + node.y, 0) / levelNodes.length;
+
+                // 检测重叠并调整位置
+                for (let i = 1; i < levelNodes.length; i++) {
+                    const current = levelNodes[i];
+                    const previous = levelNodes[i - 1];
+                    const currentWidth = getTextWidth(current.data.name, current.data.style?.fontSize || 14);
+                    const minDistance = Math.max(currentWidth + 40, 100);
+
+                    if (current.y - previous.y < minDistance) {
+                        current.y = previous.y + minDistance;
+                    }
+                }
+
+                // 重新计算中心位置并保持相对于原始中心的位置
+                const newCenter = levelNodes.reduce((sum, node) => sum + node.y, 0) / levelNodes.length;
+                const centerOffset = originalCenter - newCenter;
+                levelNodes.forEach(node => {
+                    node.y += centerOffset;
+                });
+            });
+        }
+
+        // 检测并解决径向重叠（径向布局）
+        function resolveRadialOverlaps(nodes) {
+            const nodesByDepth = {};
+            nodes.forEach(d => {
+                if (!nodesByDepth[d.depth]) nodesByDepth[d.depth] = [];
+                nodesByDepth[d.depth].push(d);
+            });
+
+            Object.values(nodesByDepth).forEach(levelNodes => {
+                if (levelNodes.length <= 1) return;
+
+                // 按角度排序
+                levelNodes.sort((a, b) => {
+                    const angleA = Math.atan2(a.y, a.x);
+                    const angleB = Math.atan2(b.y, b.x);
+                    return angleA - angleB;
+                });
+
+                // 确保角度间距足够
+                const minAngleDistance = Math.max(0.3, 2 * Math.PI / (levelNodes.length * 2));
+
+                for (let i = 1; i < levelNodes.length; i++) {
+                    const current = levelNodes[i];
+                    const previous = levelNodes[i - 1];
+
+                    const currentAngle = Math.atan2(current.y, current.x);
+                    const previousAngle = Math.atan2(previous.y, previous.x);
+
+                    if (currentAngle - previousAngle < minAngleDistance) {
+                        const newAngle = previousAngle + minAngleDistance;
+                        const radius = Math.sqrt(current.x * current.x + current.y * current.y);
+                        current.x = radius * Math.cos(newAngle);
+                        current.y = radius * Math.sin(newAngle);
+                    }
+                }
+            });
+        }
+
+        // 垂直重新分布 - 用于水平布局
+        function redistributeVertically(nodes) {
+            // 按深度分组
+            const nodesByDepth = {};
+            nodes.forEach(d => {
+                if (!nodesByDepth[d.depth]) {
+                    nodesByDepth[d.depth] = [];
+                }
+                nodesByDepth[d.depth].push(d);
+            });
+
+            // 对每个深度级别重新分布节点
+            Object.keys(nodesByDepth).forEach(depth => {
+                const levelNodes = nodesByDepth[depth];
+                if (levelNodes.length <= 1) return;
+
+                // 按当前垂直位置排序
+                levelNodes.sort((a, b) => a.x - b.x);
+
+                // 计算总的可用垂直空间
+                const availableHeight = height - 200;
+                const nodeSpacing = Math.max(80, availableHeight / (levelNodes.length + 1));
+
+                // 重新均匀分布节点
+                levelNodes.forEach((node, index) => {
+                    node.x = (index + 1) * nodeSpacing - availableHeight / 2;
+                });
+            });
+        }
+
+        // 水平重新分布 - 用于垂直布局
+        function redistributeHorizontally(nodes) {
+            // 按深度分组
+            const nodesByDepth = {};
+            nodes.forEach(d => {
+                if (!nodesByDepth[d.depth]) {
+                    nodesByDepth[d.depth] = [];
+                }
+                nodesByDepth[d.depth].push(d);
+            });
+
+            // 对每个深度级别重新分布节点
+            Object.keys(nodesByDepth).forEach(depth => {
+                const levelNodes = nodesByDepth[depth];
+                if (levelNodes.length <= 1) return;
+
+                // 按当前水平位置排序
+                levelNodes.sort((a, b) => a.y - b.y);
+
+                // 计算总的可用水平空间
+                const availableWidth = width - 400;
+                const nodeSpacing = Math.max(120, availableWidth / (levelNodes.length + 1));
+
+                // 重新均匀分布节点
+                levelNodes.forEach((node, index) => {
+                    node.y = (index + 1) * nodeSpacing - availableWidth / 2;
+                });
+            });
+        }
+
+        // 更新思维导图 - 智能布局系统
+        function update(source) {
+            // 动态计算节点间距，防止重叠
+            const nodeSpacing = calculateDynamicSpacing();
+
+            // 使用智能分离函数
+            if (currentLayout === 'horizontal') {
+                tree = d3.tree()
+                    .size([height - 100, width - 200])
+                    .separation((a, b) => {
+                        // 改进的分离算法：更均匀的分布
+                        if (a.parent === b.parent) {
+                            // 同级节点：基于文本长度动态调整
+                            const aTextWidth = getTextWidth(a.data.name, a.data.style?.fontSize || 14);
+                            const bTextWidth = getTextWidth(b.data.name, b.data.style?.fontSize || 14);
+                            const maxTextWidth = Math.max(aTextWidth, bTextWidth);
+                            return Math.max(1.2, maxTextWidth / 80); // 确保最小间距
+                        } else {
+                            // 不同父节点：更大间距
+                            return 2.0;
+                        }
+                    });
+            } else if (currentLayout === 'vertical') {
+                tree = d3.tree()
+                    .size([width - 200, height - 100])
+                    .separation((a, b) => {
+                        const baseSpacing = a.parent === b.parent ? 1.5 : 2.5;
+                        const textFactor = Math.max(
+                            getTextWidth(a.data.name, a.data.style?.fontSize || 14),
+                            getTextWidth(b.data.name, b.data.style?.fontSize || 14)
+                        ) / 100;
+                        return baseSpacing + textFactor;
+                    });
+            } else if (currentLayout === 'radial') {
+                tree = d3.tree()
+                    .size([2 * Math.PI, Math.min(width, height) / 2 - 100])
+                    .separation((a, b) => {
+                        const baseSpacing = a.parent === b.parent ? 1.2 : 2.0;
+                        const depthFactor = Math.max(a.depth, b.depth) * 0.3;
+                        return baseSpacing + depthFactor;
+                    });
+            }
+
+            const treeData = tree(root);
+            const nodes = treeData.descendants();
+            const links = treeData.descendants().slice(1);
+
+            // 性能检测和优化
+            checkPerformanceMode(nodes.length);
+
+            // 智能布局位置调整，防止重叠
+            if (currentLayout === 'horizontal') {
+                nodes.forEach(d => {
+                    d.y = d.depth * nodeSpacing.horizontal;
+                });
+                // 应用平衡布局算法
+                balanceHorizontalLayout(nodes);
+                // 检测并解决垂直重叠
+                resolveVerticalOverlaps(nodes);
+            } else if (currentLayout === 'vertical') {
+                nodes.forEach(d => {
+                    const temp = d.x;
+                    d.x = d.depth * nodeSpacing.horizontal;
+                    d.y = temp;
+                });
+                // 检测并解决水平重叠
+                resolveHorizontalOverlaps(nodes);
+            } else if (currentLayout === 'radial') {
+                nodes.forEach(d => {
+                    const angle = d.x;
+                    const radius = Math.max(d.y, d.depth * 80); // 确保最小半径
+                    d.x = radius * Math.cos(angle - Math.PI / 2);
+                    d.y = radius * Math.sin(angle - Math.PI / 2);
+                });
+                // 检测并解决径向重叠
+                resolveRadialOverlaps(nodes);
+            }
+            
+            // 更新节点
+            const node = g.selectAll('g.node')
+                .data(nodes, d => d.id || (d.id = ++i));
+            
+            // 进入新节点
+            const nodeEnter = node.enter().append('g')
+                .attr('class', 'node')
+                .attr('transform', d => `translate(${source.y0},${source.x0})`)
+                .style('cursor', 'pointer')
+                .call(d3.drag()
+                    .on('start', dragstarted)
+                    .on('drag', dragged)
+                    .on('end', dragended));
+
+            // 添加节点终点标记（小圆点）- 放在节点起点
+            nodeEnter.append('circle')
+                .attr('class', 'node-point')
+                .attr('r', 3)
+                .attr('cx', 8)  // 固定在节点起点位置
+                .attr('cy', 0)
+                .style('fill', '#4fc3f7')
+                .style('stroke', '#ffffff')
+                .style('stroke-width', 1);
+
+            // 添加透明的点击区域（扩大点击范围）
+            nodeEnter.append('rect')
+                .attr('class', 'click-area')
+                .attr('width', function(d) {
+                    const fontSize = d.data.style ? d.data.style.fontSize : 14;
+                    const textWidth = getTextWidth(d.data.name, fontSize);
+                    return Math.max(textWidth + 50, 120); // 增加宽度以适应新的文本位置
+                })
+                .attr('height', 30) // 增加高度以防止重叠
+                .attr('x', 5)  // 从小圆点左侧开始，覆盖圆点和文字
+                .attr('y', -15) // 调整垂直位置
+                .style('fill', 'transparent')
+                .style('cursor', 'pointer')
+                .on('click', click)
+                .on('contextmenu', rightClick)
+                .on('dblclick', doubleClick);
+
+            // 添加文本（从小圆点右侧开始，向右移动更多）
+            const textElements = nodeEnter.append('text')
+                .attr('dy', '.35em')
+                .attr('text-anchor', 'start')  // 文字左对齐，从圆点右侧向右
+                .attr('x', 20)  // 增加距离，从小圆点更右侧开始显示文字
+                .text(d => d.data.name)
+                .style('fill', d => d.data.style ? d.data.style.textColor : '#ffffff')
+                .style('font-size', d => d.data.style ? d.data.style.fontSize + 'px' : '14px')
+                .style('font-weight', d => d.data.style ? d.data.style.fontWeight : 'normal')
+                .style('font-style', d => d.data.style && d.data.style.fontItalic ? 'italic' : 'normal')
+                .style('fill-opacity', 1e-6);
+
+            // 添加底部横线（从小圆点右侧开始，覆盖文字）
+            nodeEnter.insert('line', 'text')
+                .attr('class', 'node-underline')
+                .attr('x1', 20)  // 从新的文字起点开始
+                .attr('x2', function(d) {
+                    const fontSize = d.data.style ? d.data.style.fontSize : 14;
+                    const textWidth = getTextWidth(d.data.name, fontSize);
+                    // 使用实际文字宽度，确保下划线精确覆盖文字
+                    return 20 + Math.max(textWidth, 50);  // 从文字起点向右延伸
+                })
+                .attr('y1', 12) // 稍微下移避免与文字重叠
+                .attr('y2', 12)
+                .style('stroke', d => d.data.style ? d.data.style.underlineColor : (d._children ? '#4fc3f7' : '#81c784'))
+                .style('stroke-width', 2)
+                .style('opacity', 1e-6);
+            
+            // 更新现有节点
+            const nodeUpdate = nodeEnter.merge(node);
+
+            // 智能动画系统：根据节点数量和距离调整动画
+            const animationDuration = calculateAnimationDuration(nodes.length);
+            const animationEase = nodes.length > 50 ? d3.easeCubicOut : d3.easeBackOut.overshoot(1.2);
+
+            nodeUpdate.transition()
+                .duration(animationDuration)
+                .ease(animationEase)
+                .delay((d, i) => i * 20) // 添加交错动画效果
+                .attr('transform', d => `translate(${d.y},${d.x})`);
+            
+            nodeUpdate.select('.node-underline')
+                .attr('x1', 20)  // 从新的文字起点开始
+                .attr('x2', function(d) {
+                    const fontSize = d.data.style ? d.data.style.fontSize : 14;
+                    const textWidth = getTextWidth(d.data.name, fontSize);
+                    return 20 + Math.max(textWidth, 50);  // 使用实际文字宽度
+                })
+                .style('stroke', d => d.data.style ? d.data.style.underlineColor : (d._children ? '#4fc3f7' : '#81c784'))
+                .style('opacity', 1)
+                .style('cursor', 'pointer');
+
+            // 更新点击区域
+            nodeUpdate.select('.click-area')
+                .attr('width', function(d) {
+                    const fontSize = d.data.style ? d.data.style.fontSize : 14;
+                    const textWidth = getTextWidth(d.data.name, fontSize);
+                    return Math.max(textWidth + 50, 120); // 增加宽度以适应新的文本位置
+                });
+
+            // 更新节点终点圆点位置（保持在固定位置）
+            nodeUpdate.select('.node-point')
+                .attr('cx', 8);  // 保持在固定位置
+
+            // 应用性能优化
+            optimizeNodeRendering(nodeUpdate);
+
+            nodeUpdate.select('text')
+                .style('fill', d => d.data.style ? d.data.style.textColor : '#ffffff')
+                .style('font-size', d => d.data.style ? d.data.style.fontSize + 'px' : '14px')
+                .style('font-weight', d => d.data.style ? d.data.style.fontWeight : 'normal')
+                .style('font-style', d => d.data.style && d.data.style.fontItalic ? 'italic' : 'normal')
+                .style('fill-opacity', 1);
+            
+            // 移除退出的节点
+            const nodeExit = node.exit().transition()
+                .duration(750)
+                .attr('transform', d => `translate(${source.y},${source.x})`)
+                .remove();
+            
+            nodeExit.select('.node-underline')
+                .style('opacity', 1e-6);
+            
+            nodeExit.select('text')
+                .style('fill-opacity', 1e-6);
+            
+            // 更新链接
+            const link = g.selectAll('path.link')
+                .data(links, d => d.id);
+            
+            const linkEnter = link.enter().insert('path', 'g')
+                .attr('class', 'link')
+                .attr('d', d => {
+                    const o = {x: source.x0, y: source.y0};
+                    return diagonal(o, o);
+                });
+            
+            const linkUpdate = linkEnter.merge(link);
+
+            // 链接动画与节点动画同步
+            linkUpdate.transition()
+                .duration(animationDuration)
+                .ease(animationEase)
+                .delay((d, i) => i * 15) // 稍微快于节点动画
+                .attr('d', d => diagonal(d, d.parent))
+                .style('stroke-opacity', 1);
+
+            const linkExit = link.exit().transition()
+                .duration(animationDuration / 2) // 退出动画更快
+                .ease(d3.easeCubicIn)
+                .attr('d', d => {
+                    const o = {x: source.x, y: source.y};
+                    return diagonal(o, o);
+                })
+                .style('stroke-opacity', 0)
+                .remove();
+            
+            // 存储旧位置
+            nodes.forEach(d => {
+                d.x0 = d.x;
+                d.y0 = d.y;
+            });
+        }
+        
+        // 连线生成器 - 传统思维导图曲线样式
+        function diagonal(s, d) {
+            if (currentLayout === 'horizontal') {
+                // 水平布局：平滑的贝塞尔曲线
+                const startX = s.x;
+                const startY = s.y;
+                const endX = d.x;
+                const endY = d.y;
+
+                return `M ${startY} ${startX}
+                        C ${(startY + endY) / 2} ${startX},
+                          ${(startY + endY) / 2} ${endX},
+                          ${endY} ${endX}`;
+            } else if (currentLayout === 'vertical') {
+                // 垂直布局：平滑的贝塞尔曲线
+                const startX = s.x;
+                const startY = s.y;
+                const endX = d.x;
+                const endY = d.y;
+
+                return `M ${startX} ${startY}
+                        C ${startX} ${(startY + endY) / 2},
+                          ${endX} ${(startY + endY) / 2},
+                          ${endX} ${endY}`;
+            } else {
+                // 辐射状布局：直线连接
+                return `M ${s.x} ${s.y} L ${d.x} ${d.y}`;
+            }
+        }
+        
+        // 智能节点点击事件
+        function click(event, d) {
+            event.stopPropagation();
+
+            // 防止快速连续点击
+            if (d._animating) return;
+            d._animating = true;
+
+            setTimeout(() => {
+                d._animating = false;
+            }, 800);
+
+            if (d.children) {
+                // 收起节点
+                d._children = d.children;
+                d.children = null;
+                updateStatus(`已收起节点: ${d.data.name}`, 'info');
+            } else if (d._children) {
+                // 展开节点
+                d.children = d._children;
+                d._children = null;
+                updateStatus(`已展开节点: ${d.data.name}，包含 ${d.children.length} 个子节点`, 'success');
+            }
+
+            // 智能更新：如果展开的节点很多，先重新计算布局
+            const visibleNodes = root.descendants().filter(node => !node._children || node.children);
+            if (visibleNodes.length > 50) {
+                updateStatus('节点较多，正在优化布局...', 'info');
+                setTimeout(() => update(d), 100);
+            } else {
+                update(d);
+            }
+        }
+
+        // 拖拽事件
+        function dragstarted(event, d) {
+            if (!event.active) {
+                // 停止任何正在进行的过渡动画
+                d3.select(this).interrupt();
+            }
+            d.fx = d.x;
+            d.fy = d.y;
+        }
+
+        function dragged(event, d) {
+            // 更新节点的固定位置
+            d.fx = event.x;
+            d.fy = event.y;
+
+            // 立即更新节点位置
+            d.x = event.x;
+            d.y = event.y;
+
+            // 更新当前节点的变换
+            d3.select(this).attr('transform', `translate(${d.y},${d.x})`);
+
+            // 更新连接到此节点的链接
+            g.selectAll('path.link')
+                .filter(link => link.source === d || link.target === d)
+                .attr('d', link => diagonal(link.source, link.target));
+        }
+
+        function dragended(event, d) {
+            if (!event.active) {
+                // 拖拽结束后可以添加一些逻辑
+            }
+            // 保持节点在拖拽后的位置
+            // d.fx = null;
+            // d.fy = null;
+        }
+        
+        // 右键点击事件
+        function rightClick(event, d) {
+            event.preventDefault();
+            currentNode = d;
+            
+            const contextMenu = document.getElementById('context-menu');
+            contextMenu.style.display = 'block';
+            contextMenu.style.left = event.pageX + 'px';
+            contextMenu.style.top = event.pageY + 'px';
+        }
+        
+        // 双击编辑
+        function doubleClick(event, d) {
+            event.stopPropagation();
+            currentNode = d;
+            showNodeEditor(d.data.name);
+        }
+        
+        // 隐藏右键菜单
+        document.addEventListener('click', function() {
+            document.getElementById('context-menu').style.display = 'none';
+        });
+        
+        // 显示节点编辑器
+        function showNodeEditor(currentName = '') {
+            const editor = document.getElementById('node-editor');
+            const input = document.getElementById('node-name-input');
+            input.value = currentName;
+            editor.style.display = 'block';
+            input.focus();
+        }
+        
+        // 保存节点编辑
+        function saveNodeEdit() {
+            const newName = document.getElementById('node-name-input').value.trim();
+            if (newName && currentNode) {
+                currentNode.data.name = newName;
+                update(currentNode);
+                updateStatus('节点已更新', 'success');
+            }
+            cancelNodeEdit();
+        }
+        
+        // 取消节点编辑
+        function cancelNodeEdit() {
+            document.getElementById('node-editor').style.display = 'none';
+            currentNode = null;
+        }
+        
+        // 右键菜单功能
+        function editNode() {
+            if (currentNode) {
+                showNodeEditor(currentNode.data.name);
+            }
+        }
+
+        // 编辑节点样式
+        function editNodeStyle() {
+            if (currentNode) {
+                showNodeStyleEditor();
+            }
+        }
+
+        // 显示节点样式编辑器
+        function showNodeStyleEditor() {
+            if (!currentNode) return;
+
+            const editor = document.getElementById('node-style-editor');
+            // 确保节点有样式对象
+            if (!currentNode.data.style) {
+                currentNode.data.style = {
+                    textColor: '#ffffff',
+                    fontSize: 14,
+                    fontWeight: 'normal',
+                    fontItalic: false,
+                    underlineColor: '#81c784'
+                };
+            }
+            const style = currentNode.data.style;
+
+            // 设置当前样式值
+            document.getElementById('node-text-color').value = style.textColor;
+            document.getElementById('node-font-size').value = style.fontSize;
+            document.getElementById('node-font-size-value').textContent = style.fontSize + 'px';
+            document.getElementById('node-font-weight').value = style.fontWeight;
+            document.getElementById('node-font-italic').checked = style.fontItalic;
+            document.getElementById('node-underline-color').value = style.underlineColor;
+
+            editor.style.display = 'block';
+        }
+
+        // 保存节点样式
+        function saveNodeStyle() {
+            if (!currentNode) return;
+
+            const style = {
+                textColor: document.getElementById('node-text-color').value,
+                fontSize: parseInt(document.getElementById('node-font-size').value),
+                fontWeight: document.getElementById('node-font-weight').value,
+                fontItalic: document.getElementById('node-font-italic').checked,
+                underlineColor: document.getElementById('node-underline-color').value
+            };
+
+            // 确保节点有样式对象
+            if (!currentNode.data.style) {
+                currentNode.data.style = {};
+            }
+
+            // 更新样式
+            Object.assign(currentNode.data.style, style);
+
+            // 重新渲染节点
+            update(currentNode);
+            updateStatus('节点样式已更新', 'success');
+
+            cancelNodeStyleEdit();
+        }
+
+        // 取消节点样式编辑
+        function cancelNodeStyleEdit() {
+            document.getElementById('node-style-editor').style.display = 'none';
+        }
+
+        // 字体大小滑块事件
+        document.addEventListener('DOMContentLoaded', function() {
+            const fontSizeSlider = document.getElementById('node-font-size');
+            if (fontSizeSlider) {
+                fontSizeSlider.addEventListener('input', function() {
+                    document.getElementById('node-font-size-value').textContent = this.value + 'px';
+                });
+            }
+        });
+        
+        function addChildNode() {
+            if (currentNode) {
+                const newNode = {
+                    name: '新节点',
+                    children: []
+                };
+                
+                if (!currentNode.data.children) {
+                    currentNode.data.children = [];
+                }
+                currentNode.data.children.push(newNode);
+                
+                // 重新渲染
+                renderMindmap(mindmapData);
+                updateStatus('已添加子节点', 'success');
+            }
+        }
+        
+        function deleteNode() {
+            if (currentNode && currentNode.parent) {
+                const parent = currentNode.parent;
+                const index = parent.data.children.indexOf(currentNode.data);
+                if (index > -1) {
+                    parent.data.children.splice(index, 1);
+                    renderMindmap(mindmapData);
+                    updateStatus('节点已删除', 'success');
+                }
+            }
+        }
+        
+        async function generateAIContent() {
+            if (currentNode) {
+                try {
+                    updateStatus('正在生成AI内容...', 'info');
+                    
+                    const response = await fetch('/api/mindmap/generate-section/', {
+                        method: 'POST',
+                        headers: {
+                            'Content-Type': 'application/json',
+                        },
+                        body: JSON.stringify({
+                            section_title: currentNode.data.name,
+                            notes_content: 'placeholder' // 这里需要传入完整的笔记内容
+                        })
+                    });
+                    
+                    const data = await response.json();
+                    
+                    if (data.success) {
+                        // 更新节点内容
+                        currentNode.data.children = data.refined_mindmap.children || [];
+                        renderMindmap(mindmapData);
+                        updateStatus('AI内容生成成功', 'success');
+                    } else {
+                        throw new Error(data.error);
+                    }
+                    
+                } catch (error) {
+                    updateStatus(`AI生成失败: ${error.message}`, 'error');
+                }
+            }
+        }
+        
+        // 工具函数
+        function resetView() {
+            svg.transition().duration(750).call(
+                d3.zoom().transform,
+                d3.zoomIdentity
+            );
+        }
+
+        // 智能重新整理布局 - 清理混乱的节点排列
+        function resetLayout() {
+            if (!root) {
+                updateStatus('没有可重置的思维导图', 'error');
+                return;
+            }
+
+            updateStatus('正在重新整理布局...', 'info');
+
+            // 清除所有节点的固定位置和动画状态
+            root.descendants().forEach(d => {
+                delete d.fx;
+                delete d.fy;
+                delete d.x0;
+                delete d.y0;
+                delete d._animating;
+            });
+
+            // 重新计算最优布局
+            update(root);
+
+            // 重置视图到合适的位置
+            setTimeout(() => {
+                resetView();
+                updateStatus('布局已重新整理，视图已居中', 'success');
+            }, 500);
+        }
+        
+        // 智能渐进式展开全部
+        function expandAll() {
+            if (!root) return;
+
+            updateStatus('正在展开全部节点...', 'info');
+
+            const allNodes = root.descendants();
+            const collapsedNodes = allNodes.filter(d => d._children);
+
+            if (collapsedNodes.length === 0) {
+                updateStatus('所有节点已展开', 'info');
+                return;
+            }
+
+            // 渐进式展开：按深度逐层展开
+            const nodesByDepth = {};
+            collapsedNodes.forEach(d => {
+                if (!nodesByDepth[d.depth]) nodesByDepth[d.depth] = [];
+                nodesByDepth[d.depth].push(d);
+            });
+
+            const depths = Object.keys(nodesByDepth).sort((a, b) => a - b);
+            let currentDepthIndex = 0;
+
+            function expandNextDepth() {
+                if (currentDepthIndex >= depths.length) {
+                    updateStatus(`展开完成，共展开 ${collapsedNodes.length} 个节点`, 'success');
+                    return;
+                }
+
+                const currentDepth = depths[currentDepthIndex];
+                const nodesAtDepth = nodesByDepth[currentDepth];
+
+                nodesAtDepth.forEach(d => {
+                    d.children = d._children;
+                    d._children = null;
+                });
+
+                update(root);
+                currentDepthIndex++;
+
+                // 延迟展开下一层，避免动画冲突
+                setTimeout(expandNextDepth, 400);
+            }
+
+            expandNextDepth();
+        }
+
+        // 智能收起全部
+        function collapseAll() {
+            if (!root) return;
+
+            updateStatus('正在收起全部节点...', 'info');
+
+            const allNodes = root.descendants();
+            const expandedNodes = allNodes.filter(d => d.children && d.depth > 0);
+
+            if (expandedNodes.length === 0) {
+                updateStatus('所有节点已收起', 'info');
+                return;
+            }
+
+            // 快速收起所有节点
+            expandedNodes.forEach(d => {
+                d._children = d.children;
+                d.children = null;
+            });
+
+            update(root);
+            updateStatus(`收起完成，共收起 ${expandedNodes.length} 个节点`, 'success');
+        }
+        
+        function exportMindmap() {
+            if (mindmapData) {
+                const dataStr = JSON.stringify(mindmapData, null, 2);
+                const dataBlob = new Blob([dataStr], {type: 'application/json'});
+                const url = URL.createObjectURL(dataBlob);
+                const link = document.createElement('a');
+                link.href = url;
+                link.download = 'mindmap.json';
+                link.click();
+                URL.revokeObjectURL(url);
+                updateStatus('思维导图已导出', 'success');
+            }
+        }
+
+
+
+        // 搜索节点功能
+        function searchNodes(searchTerm) {
+            if (!searchTerm.trim()) {
+                clearSearch();
+                return;
+            }
+
+            // 重置所有节点样式
+            svg.selectAll('.node text').style('fill', d => d.data.style ? d.data.style.textColor : '#ffffff');
+            svg.selectAll('.node-underline').style('stroke', d => d.data.style ? d.data.style.underlineColor : (d._children ? '#4fc3f7' : '#81c784'));
+
+            // 高亮匹配的节点
+            svg.selectAll('.node')
+                .filter(d => d.data.name.toLowerCase().includes(searchTerm.toLowerCase()))
+                .select('text')
+                .style('fill', '#ffeb3b');  // 黄色高亮
+
+            svg.selectAll('.node')
+                .filter(d => d.data.name.toLowerCase().includes(searchTerm.toLowerCase()))
+                .select('.node-underline')
+                .style('stroke', '#ffeb3b');  // 黄色高亮
+        }
+
+        // 清除搜索高亮
+        function clearSearch() {
+            document.getElementById('search-input').value = '';
+            svg.selectAll('.node text').style('fill', d => d.data.style ? d.data.style.textColor : '#ffffff');
+            svg.selectAll('.node-underline').style('stroke', d => d.data.style ? d.data.style.underlineColor : (d._children ? '#4fc3f7' : '#81c784'));
+        }
+
+        // 导出为PNG图片
+        function exportAsPNG() {
+            if (!svg) {
+                updateStatus('请先加载思维导图', 'error');
+                return;
+            }
+
+            try {
+                // 获取SVG元素
+                const svgElement = document.getElementById('mindmap-svg');
+                const svgData = new XMLSerializer().serializeToString(svgElement);
+
+                // 创建canvas
+                const canvas = document.createElement('canvas');
+                const ctx = canvas.getContext('2d');
+                const img = new Image();
+
+                // 设置canvas大小
+                canvas.width = svgElement.clientWidth || 800;
+                canvas.height = svgElement.clientHeight || 600;
+
+                // 设置白色背景
+                ctx.fillStyle = '#1a1a2e';
+                ctx.fillRect(0, 0, canvas.width, canvas.height);
+
+                img.onload = function() {
+                    ctx.drawImage(img, 0, 0);
+
+                    // 下载图片
+                    const link = document.createElement('a');
+                    link.download = 'mindmap.png';
+                    link.href = canvas.toDataURL();
+                    link.click();
+
+                    updateStatus('思维导图已导出为图片', 'success');
+                };
+
+                img.src = 'data:image/svg+xml;base64,' + btoa(unescape(encodeURIComponent(svgData)));
+
+            } catch (error) {
+                console.error('导出图片失败:', error);
+                updateStatus('导出图片失败', 'error');
+            }
+        }
+    </script>
+</body>
+</html>

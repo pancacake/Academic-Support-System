@@ -1,0 +1,2183 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="csrf-token" content="{{ csrf_token }}">
+    <title>智能出题 - 学术支持系统</title>
+
+    <!-- 核心JavaScript函数 - 在页面加载前定义 -->
+    <script>
+        console.log('定义核心JavaScript函数...');
+
+        // 全局函数：切换题目数量输入框状态
+        function toggleQuestionCount(type) {
+            console.log('toggleQuestionCount 被调用，参数:', type);
+            const checkbox = document.getElementById(type);
+            const countInput = document.getElementById(type + 'Count');
+
+            if (checkbox && countInput) {
+                countInput.disabled = !checkbox.checked;
+                console.log('切换题型:', type, '选中:', checkbox.checked, '输入框禁用:', countInput.disabled);
+            } else {
+                console.error('找不到元素:', type, 'checkbox:', checkbox, 'countInput:', countInput);
+            }
+        }
+
+        // 全局函数：开始出题流程（实际实现在页面底部）
+        // startQuestionGeneration() 函数在页面底部定义
+
+        console.log('核心JavaScript函数定义完成');
+        console.log('toggleQuestionCount:', typeof toggleQuestionCount);
+        // startQuestionGeneration函数在页面底部定义
+    </script>
+
+    <!-- 简化的数学公式支持 -->
+    <script>
+        // 简单的数学公式渲染器
+        window.renderMathInElement = function(element) {
+            if (!element) return;
+
+            // 简单的数学公式标记处理
+            if (element.innerHTML) {
+                element.innerHTML = element.innerHTML
+                    .replace(/\$\$(.*?)\$\$/g, '<div class="math-display">$1</div>')
+                    .replace(/\$(.*?)\$/g, '<span class="math-inline">$1</span>');
+            }
+        };
+
+        // 页面加载完成后处理数学公式
+        document.addEventListener('DOMContentLoaded', function() {
+            const mathElements = document.querySelectorAll('.markdown-content, .question-text, .explanation');
+            mathElements.forEach(el => {
+                if (window.renderMathInElement) {
+                    window.renderMathInElement(el);
+                }
+            });
+        });
+    </script>
+
+    <style>
+        html, body {
+            height: 100%;
+            width: 100%;
+            margin: 0;
+            padding: 0;
+            font-size: 16px;
+            box-sizing: border-box;
+        }
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Roboto', 'Helvetica Neue', Arial, sans-serif;
+            background: linear-gradient(135deg, #1a1a2e 0%, #16213e 25%, #0f3460 50%, #533483 75%, #2d1b69 100%);
+            color: #e8eaed;
+            min-height: 100vh;
+            min-width: 100vw;
+            overflow: hidden;
+            margin: 0;
+            padding: 0;
+            position: relative;
+        }
+
+        /* 添加动态背景粒子效果 */
+        body::before {
+            content: '';
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background:
+                radial-gradient(circle at 20% 80%, rgba(120, 119, 198, 0.15) 0%, transparent 50%),
+                radial-gradient(circle at 80% 20%, rgba(255, 119, 198, 0.1) 0%, transparent 50%),
+                radial-gradient(circle at 40% 40%, rgba(120, 219, 255, 0.08) 0%, transparent 50%);
+            pointer-events: none;
+            z-index: -1;
+            animation: backgroundShift 20s ease-in-out infinite;
+        }
+
+        @keyframes backgroundShift {
+            0%, 100% { opacity: 1; }
+            50% { opacity: 0.7; }
+        }
+        .topbar {
+            width: 100vw;
+            min-width: 0;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            padding: 0.75rem 2rem;
+            background: rgba(47, 47, 47, 0.8);
+            backdrop-filter: blur(20px);
+            -webkit-backdrop-filter: blur(20px);
+            font-size: 1rem;
+            font-weight: 500;
+            box-sizing: border-box;
+            border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+            z-index: 100;
+            box-shadow: 0 2px 16px rgba(0, 0, 0, 0.3);
+            height: 60px;
+        }
+        .topbar .sysname {
+            color: #ffffff;
+            font-weight: 600;
+        }
+        .topbar .user-area {
+            font-size: 1.2vw;
+            font-weight: normal;
+            background: rgba(255,255,255,0.1);
+            padding: 0.5vw 1vw;
+            border-radius: 20px;
+            backdrop-filter: blur(10px);
+        }
+        .main-layout {
+            display: flex;
+            height: calc(100vh - 70px);
+        }
+
+        .sidebar {
+            width: 60px;
+            background: rgba(26, 26, 26, 0.8);
+            backdrop-filter: blur(20px);
+            -webkit-backdrop-filter: blur(20px);
+            border-right: 1px solid rgba(79, 195, 247, 0.2);
+            border-radius: 0 16px 16px 0;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            padding: 1rem 0;
+            transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+            overflow: hidden;
+            z-index: 50;
+            box-shadow: 4px 0 32px rgba(0, 0, 0, 0.3),
+                        inset -1px 0 0 rgba(79, 195, 247, 0.1);
+        }
+
+        .sidebar:hover {
+            width: 200px;
+        }
+
+        .sidebar-item {
+            width: calc(100% - 1rem);
+            display: flex;
+            align-items: center;
+            padding: 0.75rem;
+            margin-bottom: 0.5rem;
+            cursor: pointer;
+            transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+            color: #999;
+            text-decoration: none;
+            border-radius: 1rem;
+            margin: 0 0.5rem 0.5rem 0.5rem;
+            position: relative;
+            overflow: hidden;
+        }
+
+        /* 默认状态下图标居中 */
+        .sidebar-item .sidebar-icon {
+            margin: 0 auto;
+        }
+
+        /* 展开时图标左对齐 */
+        .sidebar:hover .sidebar-item .sidebar-icon {
+            margin: 0;
+        }
+
+        .sidebar-item::before {
+            content: '';
+            position: absolute;
+            top: 0;
+            left: 0;
+            right: 0;
+            bottom: 0;
+            background: linear-gradient(135deg, rgba(255, 255, 255, 0.1), rgba(255, 255, 255, 0.05));
+            opacity: 0;
+            transition: opacity 0.3s ease;
+            border-radius: 1rem;
+        }
+
+        .sidebar-item:hover::before {
+            opacity: 1;
+        }
+
+        .sidebar-item:hover {
+            color: #e8eaed;
+            transform: translateY(-2px);
+            box-shadow: 0 8px 25px rgba(0, 0, 0, 0.3);
+        }
+
+        .sidebar-item.active {
+            background: linear-gradient(135deg, #0084ff, #0066cc);
+            color: white;
+            box-shadow: 0 4px 16px rgba(0, 132, 255, 0.3);
+        }
+
+        .sidebar-icon {
+            font-size: 1.2rem;
+            min-width: 24px;
+            text-align: center;
+        }
+
+        .sidebar-text {
+            margin-left: 1rem;
+            white-space: nowrap;
+            opacity: 0;
+            transition: opacity 0.3s ease;
+        }
+
+        .sidebar:hover .sidebar-text {
+            opacity: 1;
+        }
+
+        .container {
+            display: flex;
+            flex-direction: row;
+            flex: 1;
+            min-height: 0;
+            padding: 0;
+            gap: 0;
+            box-sizing: border-box;
+        }
+
+        .chat-section {
+            flex: 0 0 500px;
+            max-width: 500px;
+            display: flex;
+            flex-direction: column;
+            background: rgba(47, 47, 47, 0.4);
+            backdrop-filter: blur(10px);
+            -webkit-backdrop-filter: blur(10px);
+            border-right: 1px solid rgba(79, 195, 247, 0.2);
+            border-radius: 0 0 16px 0;
+            box-shadow: 2px 0 20px rgba(0, 0, 0, 0.2),
+                        inset -1px 0 0 rgba(79, 195, 247, 0.1);
+            min-width: 0;
+            min-height: 0;
+        }
+
+        .questions-section {
+            flex: 2;
+            display: flex;
+            flex-direction: column;
+            background: rgba(30, 30, 30, 0.8);
+            backdrop-filter: blur(20px);
+            -webkit-backdrop-filter: blur(20px);
+            min-width: 0;
+            min-height: 0;
+            border-radius: 1.5rem;
+            box-shadow: 0 8px 32px rgba(0, 0, 0, 0.3);
+            margin: 1rem;
+        }
+
+        .questions-header {
+            padding: 1rem 1.5rem;
+            border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+            font-size: 1rem;
+            font-weight: 500;
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            color: #e8eaed;
+            background: linear-gradient(90deg,
+                rgba(120, 119, 198, 0.15) 0%,
+                rgba(255, 119, 198, 0.08) 50%,
+                rgba(120, 219, 255, 0.15) 100%);
+            position: relative;
+            border-radius: 1.5rem 1.5rem 0 0;
+        }
+
+        .questions-content {
+            flex: 1;
+            padding: 1.5rem;
+            overflow-y: auto;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            color: #999;
+            font-size: 1.1rem;
+        }
+
+        .chat-messages {
+            flex: 1;
+            overflow-y: auto;
+            padding: 1rem;
+            display: flex;
+            flex-direction: column;
+            gap: 1rem;
+        }
+
+        .message {
+            display: flex;
+            align-items: flex-start;
+            gap: 0.75rem;
+            padding: 1rem;
+            border-radius: 1rem;
+            background: rgba(255, 255, 255, 0.05);
+            backdrop-filter: blur(10px);
+            border: 1px solid rgba(255, 255, 255, 0.1);
+        }
+
+        .message.user {
+            background: linear-gradient(135deg, rgba(0, 132, 255, 0.2), rgba(0, 102, 204, 0.1));
+            border: 1px solid rgba(0, 132, 255, 0.3);
+            margin-left: 2rem;
+        }
+
+        .message.system {
+            background: linear-gradient(135deg, rgba(120, 119, 198, 0.2), rgba(255, 119, 198, 0.1));
+            border: 1px solid rgba(120, 119, 198, 0.3);
+            margin-right: 2rem;
+        }
+
+        .message-avatar {
+            font-size: 1.5rem;
+            min-width: 2rem;
+            text-align: center;
+        }
+
+        .message-content {
+            flex: 1;
+            line-height: 1.6;
+            color: #e8eaed;
+        }
+
+        .chat-input-area {
+            padding: 1rem;
+            border-top: 1px solid rgba(255, 255, 255, 0.1);
+            background: rgba(0, 0, 0, 0.2);
+            border-radius: 0 0 16px 0;
+        }
+
+        .chat-input-container {
+            display: flex;
+            gap: 0.75rem;
+            align-items: flex-end;
+        }
+
+        .chat-input {
+            flex: 1;
+            background: rgba(255, 255, 255, 0.1);
+            border: 1px solid rgba(255, 255, 255, 0.2);
+            border-radius: 1rem;
+            padding: 0.75rem 1rem;
+            color: #e8eaed;
+            font-size: 1rem;
+            resize: none;
+            min-height: 2.5rem;
+            max-height: 8rem;
+            transition: all 0.3s ease;
+        }
+
+        .chat-input:focus {
+            outline: none;
+            border-color: rgba(79, 195, 247, 0.5);
+            background: rgba(255, 255, 255, 0.15);
+        }
+
+        .chat-input::placeholder {
+            color: rgba(255, 255, 255, 0.5);
+        }
+
+        .send-btn {
+            background: linear-gradient(135deg, #0084ff, #0066cc);
+            border: none;
+            border-radius: 50%;
+            width: 2.5rem;
+            height: 2.5rem;
+            color: white;
+            cursor: pointer;
+            transition: all 0.3s ease;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 1rem;
+        }
+
+        .send-btn:hover {
+            transform: scale(1.1);
+            box-shadow: 0 4px 16px rgba(0, 132, 255, 0.3);
+        }
+
+        .question-card {
+            background: rgba(255, 255, 255, 0.05);
+            border-radius: 1rem;
+            padding: 1.5rem;
+            margin-bottom: 1rem;
+            border: 1px solid rgba(255, 255, 255, 0.1);
+            backdrop-filter: blur(10px);
+        }
+
+        .question-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 1rem;
+        }
+
+        .question-type {
+            background: linear-gradient(135deg, #0084ff, #0066cc);
+            color: white;
+            padding: 0.25rem 0.75rem;
+            border-radius: 1rem;
+            font-size: 0.875rem;
+            font-weight: 500;
+        }
+
+        .question-text {
+            color: #e8eaed;
+            font-size: 1.1rem;
+            line-height: 1.6;
+            margin-bottom: 1rem;
+        }
+
+        .question-options {
+            margin: 1rem 0;
+        }
+
+        .option {
+            background: rgba(255, 255, 255, 0.05);
+            border: 1px solid rgba(255, 255, 255, 0.1);
+            border-radius: 0.5rem;
+            padding: 0.75rem;
+            margin-bottom: 0.5rem;
+            cursor: pointer;
+            transition: all 0.3s ease;
+            color: #e8eaed;
+        }
+
+        .option:hover {
+            background: rgba(255, 255, 255, 0.1);
+            border-color: rgba(79, 195, 247, 0.5);
+        }
+
+        .option.selected {
+            background: linear-gradient(135deg, rgba(0, 132, 255, 0.2), rgba(0, 102, 204, 0.1));
+            border-color: rgba(0, 132, 255, 0.5);
+            transform: translateX(5px);
+        }
+
+        .option.correct {
+            background: linear-gradient(135deg, rgba(76, 175, 80, 0.3), rgba(56, 142, 60, 0.2));
+            border-color: #4caf50;
+            color: #4caf50;
+            animation: correctPulse 0.6s ease;
+        }
+
+        .option.incorrect {
+            background: linear-gradient(135deg, rgba(244, 67, 54, 0.3), rgba(211, 47, 47, 0.2));
+            border-color: #f44336;
+            color: #f44336;
+            animation: incorrectShake 0.6s ease;
+        }
+
+        .option.disabled {
+            cursor: not-allowed;
+            opacity: 0.6;
+            pointer-events: none;
+        }
+
+        @keyframes correctPulse {
+            0% { transform: scale(1) translateX(5px); }
+            50% { transform: scale(1.05) translateX(5px); box-shadow: 0 0 20px rgba(76, 175, 80, 0.5); }
+            100% { transform: scale(1) translateX(5px); }
+        }
+
+        @keyframes incorrectShake {
+            0%, 100% { transform: translateX(5px); }
+            25% { transform: translateX(0px); }
+            75% { transform: translateX(10px); }
+        }
+
+        .answer-input {
+            width: 100%;
+            background: rgba(255, 255, 255, 0.1);
+            border: 1px solid rgba(255, 255, 255, 0.2);
+            border-radius: 0.5rem;
+            padding: 0.75rem;
+            color: #e8eaed;
+            font-size: 1rem;
+            margin-bottom: 1rem;
+        }
+
+        .answer-input:focus {
+            outline: none;
+            border-color: rgba(79, 195, 247, 0.5);
+            background: rgba(255, 255, 255, 0.15);
+        }
+
+        .answer-input::placeholder {
+            color: rgba(255, 255, 255, 0.5);
+        }
+
+        .submit-answer-btn {
+            background: linear-gradient(135deg, #0084ff, #0066cc);
+            color: white;
+            border: none;
+            border-radius: 0.5rem;
+            padding: 0.75rem 1.5rem;
+            font-size: 1rem;
+            cursor: pointer;
+            transition: all 0.3s ease;
+        }
+
+        .submit-answer-btn:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 4px 16px rgba(0, 132, 255, 0.3);
+        }
+
+        .loading-spinner {
+            display: inline-block;
+            width: 20px;
+            height: 20px;
+            border: 3px solid rgba(255, 255, 255, 0.3);
+            border-radius: 50%;
+            border-top-color: #fff;
+            animation: spin 1s ease-in-out infinite;
+        }
+
+        @keyframes spin {
+            to { transform: rotate(360deg); }
+        }
+
+        .preparing-message {
+            text-align: center;
+            color: #999;
+            font-size: 1.1rem;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            gap: 1rem;
+        }
+
+        /* 答案区域样式 */
+        .answer-section {
+            margin-top: 1rem;
+            padding: 1rem;
+            background: rgba(255, 255, 255, 0.05);
+            border-radius: 0.5rem;
+            border-left: 4px solid #0084ff;
+            max-height: 60vh;
+            overflow-y: auto;
+        }
+
+        .correct-answer {
+            font-weight: bold;
+            color: #4caf50;
+            margin-bottom: 0.5rem;
+        }
+
+        .explanation {
+            color: #e8eaed;
+            line-height: 1.6;
+        }
+
+        /* Markdown内容样式 */
+        .markdown-content {
+            color: #e8eaed;
+            line-height: 1.6;
+        }
+
+        .markdown-content h1, .markdown-content h2, .markdown-content h3,
+        .markdown-content h4, .markdown-content h5, .markdown-content h6 {
+            color: #4fc3f7;
+            margin: 1rem 0 0.5rem 0;
+            font-weight: bold;
+        }
+
+        .markdown-content h1 { font-size: 1.5rem; }
+        .markdown-content h2 { font-size: 1.3rem; }
+        .markdown-content h3 { font-size: 1.1rem; }
+
+        .markdown-content p {
+            margin: 0.5rem 0;
+        }
+
+        .markdown-content ul, .markdown-content ol {
+            margin: 0.5rem 0;
+            padding-left: 1.5rem;
+        }
+
+        .markdown-content li {
+            margin: 0.25rem 0;
+        }
+
+        .markdown-content strong {
+            color: #81c784;
+            font-weight: bold;
+        }
+
+        .markdown-content em {
+            color: #ffb74d;
+            font-style: italic;
+        }
+
+        .markdown-content code {
+            background: rgba(255, 255, 255, 0.1);
+            padding: 0.2rem 0.4rem;
+            border-radius: 0.25rem;
+            font-family: 'Courier New', monospace;
+            color: #f8bbd9;
+        }
+
+        .markdown-content pre {
+            background: rgba(255, 255, 255, 0.1);
+            padding: 1rem;
+            border-radius: 0.5rem;
+            overflow-x: auto;
+            margin: 0.5rem 0;
+        }
+
+        .markdown-content blockquote {
+            border-left: 4px solid #4fc3f7;
+            padding-left: 1rem;
+            margin: 0.5rem 0;
+            color: #b0bec5;
+        }
+
+        /* 数学公式样式 */
+        .math-display {
+            text-align: center;
+            margin: 16px 0;
+            padding: 8px;
+            background: rgba(255, 255, 255, 0.05);
+            border-radius: 4px;
+            border-left: 3px solid #4fc3f7;
+        }
+
+        .math-inline {
+            display: inline;
+            margin: 0 2px;
+        }
+
+        /* MathJax元素样式 */
+        .MathJax {
+            color: inherit !important;
+        }
+
+        .error-message {
+            color: #dc3545;
+            background: #f8d7da;
+            padding: 10px;
+            border-radius: 6px;
+            margin-bottom: 15px;
+        }
+
+        /* 题型选择对话框样式 */
+        .question-type-dialog {
+            background: rgba(255, 255, 255, 0.05);
+            border-radius: 1rem;
+            padding: 1.5rem;
+            border: 1px solid rgba(255, 255, 255, 0.1);
+            max-width: 500px;
+        }
+
+        .question-type-grid {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 1rem;
+            margin-bottom: 1.5rem;
+        }
+
+        .question-type-item {
+            display: flex;
+            flex-direction: column;
+            gap: 0.5rem;
+        }
+
+        .question-type-label {
+            display: flex;
+            align-items: center;
+            gap: 0.5rem;
+            cursor: pointer;
+            font-weight: 500;
+        }
+
+        .question-type-checkbox {
+            width: 18px;
+            height: 18px;
+            accent-color: #4fc3f7;
+        }
+
+        .question-type-name {
+            color: #e8eaed;
+            font-size: 0.95rem;
+        }
+
+        .question-count-input {
+            background: rgba(255, 255, 255, 0.1);
+            border: 1px solid rgba(255, 255, 255, 0.2);
+            border-radius: 0.5rem;
+            padding: 0.5rem;
+            color: #e8eaed;
+            font-size: 0.9rem;
+            width: 80px;
+        }
+
+        .question-count-input:disabled {
+            opacity: 0.5;
+            cursor: not-allowed;
+        }
+
+        .question-count-input:enabled {
+            border-color: #4fc3f7;
+        }
+
+        .dialog-actions {
+            text-align: right;
+        }
+
+        .confirm-btn {
+            background: linear-gradient(135deg, #4fc3f7, #29b6f6);
+            color: white;
+            border: none;
+            border-radius: 0.5rem;
+            padding: 0.75rem 1.5rem;
+            font-size: 1rem;
+            cursor: pointer;
+            transition: all 0.3s ease;
+        }
+
+        .confirm-btn:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 4px 16px rgba(79, 195, 247, 0.3);
+        }
+
+        .preference-input {
+            background: rgba(255, 255, 255, 0.1);
+            border: 1px solid rgba(255, 255, 255, 0.2);
+            border-radius: 0.5rem;
+            padding: 0.75rem;
+            color: #e8eaed;
+            font-size: 0.95rem;
+            width: 100%;
+            min-height: 80px;
+            resize: vertical;
+            margin-bottom: 1rem;
+        }
+
+        .preference-input:focus {
+            outline: none;
+            border-color: #4fc3f7;
+            background: rgba(255, 255, 255, 0.15);
+        }
+
+        @media (max-width: 768px) {
+            .main-content {
+                grid-template-columns: 1fr;
+            }
+
+            .container {
+                padding: 10px;
+            }
+
+            .question-type-grid {
+                grid-template-columns: 1fr;
+            }
+        }
+    </style>
+</head>
+<body>
+    <!-- 顶部导航栏 -->
+    <div class="topbar">
+        <div class="sysname">知悟·启明学业问答系统</div>
+        <div class="user-area" style="display: flex; align-items: center; gap: 1rem;">
+            <span id="userInfo">访客用户</span>
+            <button id="logoutBtn" style="
+                background: rgba(79, 195, 247, 0.1);
+                border: 1px solid rgba(79, 195, 247, 0.3);
+                color: #e8eaed;
+                padding: 0.5rem 1rem;
+                border-radius: 6px;
+                cursor: pointer;
+                transition: all 0.3s ease;
+                font-size: 0.9rem;
+            " onclick="handleLogout()" onmouseover="this.style.background='rgba(79, 195, 247, 0.2)'" onmouseout="this.style.background='rgba(79, 195, 247, 0.1)'">
+                退出登录
+            </button>
+        </div>
+    </div>
+
+    <div class="main-layout">
+        <div class="sidebar">
+            <a href="/" class="sidebar-item">
+                <div class="sidebar-icon">💬</div>
+                <div class="sidebar-text">聊天</div>
+            </a>
+            <a href="/mindmap/" class="sidebar-item">
+                <div class="sidebar-icon">🧠</div>
+                <div class="sidebar-text">思维导图</div>
+            </a>
+            <a href="/questions/" class="sidebar-item active">
+                <div class="sidebar-icon">📝</div>
+                <div class="sidebar-text">智能出题</div>
+            </a>
+        </div>
+
+        <div class="container">
+            <!-- 左侧聊天区域 -->
+            <div class="chat-section">
+                <div class="chat-messages" id="chatMessages">
+                    <!-- 初始的题型选择对话框 -->
+                    <div class="message system">
+                        <div class="message-avatar">📝</div>
+                        <div class="message-content">
+                            <div class="question-type-dialog" id="questionTypeDialog">
+                                <h3 style="margin-bottom: 1rem; color: #4fc3f7;">请选择题型和数量</h3>
+
+                                <div class="question-type-grid">
+                                    <div class="question-type-item">
+                                        <label class="question-type-label">
+                                            <input type="checkbox" id="multipleChoice" class="question-type-checkbox" checked onchange="toggleQuestionCount('multipleChoice')">
+                                            <span class="question-type-name">选择题</span>
+                                        </label>
+                                        <input type="number" id="multipleChoiceCount" class="question-count-input" min="1" max="20" value="5">
+                                    </div>
+
+                                    <div class="question-type-item">
+                                        <label class="question-type-label">
+                                            <input type="checkbox" id="fillBlank" class="question-type-checkbox" checked onchange="toggleQuestionCount('fillBlank')">
+                                            <span class="question-type-name">填空题</span>
+                                        </label>
+                                        <input type="number" id="fillBlankCount" class="question-count-input" min="1" max="20" value="3">
+                                    </div>
+
+                                    <div class="question-type-item">
+                                        <label class="question-type-label">
+                                            <input type="checkbox" id="trueOrFalse" class="question-type-checkbox" checked onchange="toggleQuestionCount('trueOrFalse')">
+                                            <span class="question-type-name">判断题</span>
+                                        </label>
+                                        <input type="number" id="trueOrFalseCount" class="question-count-input" min="1" max="20" value="5">
+                                    </div>
+
+                                    <div class="question-type-item">
+                                        <label class="question-type-label">
+                                            <input type="checkbox" id="shortAnswer" class="question-type-checkbox" checked onchange="toggleQuestionCount('shortAnswer')">
+                                            <span class="question-type-name">解答题</span>
+                                        </label>
+                                        <input type="number" id="shortAnswerCount" class="question-count-input" min="1" max="10" value="2">
+                                    </div>
+                                </div>
+
+                                <div class="dialog-actions">
+                                    <button class="confirm-btn" onclick="startQuestionGeneration()">确认选择</button>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="chat-input-area">
+                    <div class="chat-input-container">
+                        <textarea
+                            id="chatInput"
+                            class="chat-input"
+                            placeholder="请描述您的出题需求，例如：我希望题目可以多考察一些基础内容"
+                            rows="1"
+                        ></textarea>
+                        <button class="send-btn" onclick="sendMessage()">
+                            ➤
+                        </button>
+                        <button onclick="debugAPI()" style="margin-left: 10px; padding: 8px 12px; background: #dc3545; color: white; border: none; border-radius: 4px; cursor: pointer; font-size: 12px;">调试API</button>
+                    </div>
+                </div>
+            </div>
+
+            <!-- 右侧题目展示区域 -->
+            <div class="questions-section">
+                <div class="questions-header">
+                    <span>📝 题目展示</span>
+                </div>
+                <div class="questions-content" id="questionsContent">
+                    <div class="preparing-message">
+                        <div>请在左侧对话框中描述您的出题需求</div>
+                        <div style="font-size: 0.9rem; color: #666;">例如：我希望题目可以多考察一些基础内容</div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        // 全局变量
+        let currentQuestions = [];
+        let currentQuestionIndex = 0;
+        let isGenerating = false;
+        let selectedQuestionTypes = {};
+        let userPreferences = '';
+        let isWaitingForPreferences = false;
+
+        // 全局函数：切换题目数量输入框状态
+        function toggleQuestionCount(type) {
+            console.log('toggleQuestionCount 被调用，参数:', type);
+            const checkbox = document.getElementById(type);
+            const countInput = document.getElementById(type + 'Count');
+
+            if (checkbox && countInput) {
+                countInput.disabled = !checkbox.checked;
+                console.log('切换题型:', type, '选中:', checkbox.checked, '输入框禁用:', countInput.disabled);
+            } else {
+                console.error('找不到元素:', type, 'checkbox:', checkbox, 'countInput:', countInput);
+            }
+        }
+
+        // 全局函数：开始出题流程
+        function startQuestionGeneration() {
+            console.log('startQuestionGeneration 被调用');
+
+            // 调试：确认函数被正确调用
+            console.log('函数 startQuestionGeneration 正在执行...');
+
+            const types = ['multipleChoice', 'fillBlank', 'trueOrFalse', 'shortAnswer'];
+            const typeNames = {
+                'multipleChoice': '选择题',
+                'fillBlank': '填空题',
+                'trueOrFalse': '判断题',
+                'shortAnswer': '解答题'
+            };
+
+            let selectedTypes = {};
+            let hasSelection = false;
+            let selectionText = '您选择了：';
+
+            types.forEach(type => {
+                const checkbox = document.getElementById(type);
+                const countInput = document.getElementById(type + 'Count');
+
+                console.log('检查题型:', type, '复选框:', checkbox ? checkbox.checked : 'null', '输入框:', countInput ? countInput.value : 'null');
+
+                if (checkbox && checkbox.checked && countInput) {
+                    const count = parseInt(countInput.value) || 0;
+                    if (count > 0) {
+                        selectedTypes[type] = {
+                            name: typeNames[type],
+                            count: count
+                        };
+                        hasSelection = true;
+                        selectionText += count + '道' + typeNames[type] + '、';
+                    }
+                }
+            });
+
+            console.log('选择的题型:', selectedTypes);
+
+            if (!hasSelection) {
+                showErrorMessage('请至少选择一种题型！');
+                return;
+            }
+
+            // 移除最后的顿号
+            selectionText = selectionText.slice(0, -1);
+
+            // 隐藏题型选择对话框
+            const dialog = document.getElementById('questionTypeDialog');
+            if (dialog) {
+                dialog.style.display = 'none';
+            }
+
+            // 更新全局变量
+            selectedQuestionTypes = selectedTypes;
+
+            // 添加确认消息
+            addMessage(selectionText, 'user');
+
+            // 调用实际的题目生成函数
+            generateQuestions();
+        }
+
+        // 获取CSRF token
+        function getCookie(name) {
+            const metaToken = document.querySelector('meta[name="csrf-token"]');
+            if (metaToken) {
+                return metaToken.getAttribute('content');
+            }
+
+            let cookieValue = null;
+            if (document.cookie && document.cookie !== '') {
+                const cookies = document.cookie.split(';');
+                for (let i = 0; i < cookies.length; i++) {
+                    const cookie = cookies[i].trim();
+                    if (cookie.substring(0, name.length + 1) === (name + '=')) {
+                        cookieValue = decodeURIComponent(cookie.substring(name.length + 1));
+                        break;
+                    }
+                }
+            }
+            return cookieValue;
+        }
+
+        // 变量已在上面声明
+
+        // 工具函数：显示错误消息
+        function showErrorMessage(message, details = null) {
+            console.error('错误:', message, details);
+
+            // 构建用户友好的错误消息
+            let userMessage = message;
+            if (message.includes('API') || message.includes('网络')) {
+                userMessage = '网络连接问题，请检查网络后重试';
+            } else if (message.includes('笔记') || message.includes('内容')) {
+                userMessage = '请先上传文档并生成笔记内容';
+            } else if (message.includes('格式') || message.includes('解析')) {
+                userMessage = '数据格式错误，请重试';
+            }
+
+            // 显示错误消息
+            if (typeof addMessage === 'function') {
+                addMessage(`❌ ${userMessage}`, 'system');
+            } else {
+                alert(userMessage);
+            }
+        }
+
+        // 工具函数：显示成功消息
+        function showSuccessMessage(message) {
+            console.log('成功:', message);
+            if (typeof addMessage === 'function') {
+                addMessage('✅ ' + message, 'system');
+            }
+        }
+
+        // 工具函数：显示警告消息
+        function showWarningMessage(message) {
+            console.warn('警告:', message);
+            if (typeof addMessage === 'function') {
+                addMessage('⚠️ ' + message, 'system');
+            }
+        }
+
+        // 工具函数：显示加载状态
+        function showLoadingState(message = '正在处理，请稍候...') {
+            const questionsContent = document.getElementById('questionsContent');
+            if (questionsContent) {
+                questionsContent.innerHTML = `
+                    <div class="preparing-message">
+                        <div class="loading-spinner"></div>
+                        <div>${message}</div>
+                    </div>
+                `;
+            }
+        }
+
+        // 工具函数：处理API响应
+        function handleApiResponse(data, successCallback, errorCallback) {
+            if (data.success) {
+                if (data.message) {
+                    showSuccessMessage(data.message);
+                }
+                if (successCallback) {
+                    successCallback(data);
+                }
+            } else {
+                const errorMsg = data.error || '操作失败';
+                showErrorMessage(errorMsg, data);
+                if (errorCallback) {
+                    errorCallback(data);
+                }
+            }
+        }
+
+
+
+        // 确认题型选择（已合并到startQuestionGeneration中，此函数保留用于兼容性）
+        function confirmQuestionTypes() {
+            console.log('confirmQuestionTypes被调用，重定向到startQuestionGeneration');
+            startQuestionGeneration();
+        }
+
+        // 询问用户偏好
+        function askForPreferences() {
+            isWaitingForPreferences = true;
+            let countdown = 10;
+
+            // 显示初始消息
+            const initialMessage = '如果您有特殊的出题偏好（如重点考查概念理解、增加实际应用场景、难度适中等），请直接告诉我，我将在 **' + countdown + '** 秒后开始自动生成题目。';
+            addMessage(initialMessage, 'system');
+
+            // 开始倒计时
+            const countdownInterval = setInterval(() => {
+                countdown--;
+                if (countdown > 0 && isWaitingForPreferences) {
+                    // 更新倒计时消息
+                    const countdownMessage = '如果您有特殊的出题偏好（如重点考查概念理解、增加实际应用场景、难度适中等），请直接告诉我，我将在 **' + countdown + '** 秒后开始自动生成题目。';
+                    updateLastSystemMessage(countdownMessage);
+                } else {
+                    clearInterval(countdownInterval);
+                    if (isWaitingForPreferences) {
+                        skipPreferences();
+                    }
+                }
+            }, 1000);
+
+            // 保存倒计时ID以便清除
+            window.preferenceCountdownInterval = countdownInterval;
+        }
+
+        // 确认用户偏好
+        function confirmPreferences() {
+            const preferenceInput = document.getElementById('preferenceInput');
+            userPreferences = preferenceInput.value.trim();
+
+            if (userPreferences) {
+                addMessage('偏好设置：' + userPreferences, 'user');
+            } else {
+                addMessage('已跳过偏好设置', 'user');
+            }
+
+            isWaitingForPreferences = false;
+            generateQuestions();
+        }
+
+        // 跳过偏好设置
+        function skipPreferences() {
+            userPreferences = '';
+            addMessage('已跳过偏好设置', 'user');
+            isWaitingForPreferences = false;
+            generateQuestions();
+        }
+
+        // 发送消息
+        async function sendMessage() {
+            const chatInput = document.getElementById('chatInput');
+            const message = chatInput.value.trim();
+
+            if (!message || isGenerating || isWaitingForPreferences) return;
+
+            // 添加用户消息
+            addMessage(message, 'user');
+            chatInput.value = '';
+
+            // 如果正在等待偏好输入
+            if (isWaitingForPreferences) {
+                // 清除倒计时
+                if (window.preferenceCountdownInterval) {
+                    clearInterval(window.preferenceCountdownInterval);
+                }
+
+                userPreferences = message;
+                addMessage('已收到您的偏好设置：**' + message + '**', 'system');
+                isWaitingForPreferences = false;
+                generateQuestions();
+                return;
+            }
+
+            // 简单回复，引导用户使用题型选择功能
+            addMessage('请使用上方的题型选择功能来生成题目，或者刷新页面重新开始。', 'system');
+        }
+
+        // 添加消息到聊天区域
+        function addMessage(content, type) {
+            const chatMessages = document.getElementById('chatMessages');
+            const messageDiv = document.createElement('div');
+            messageDiv.className = 'message ' + type;
+
+            const avatar = type === 'user' ? '👤' : '📝';
+
+            // 渲染Markdown内容
+            const renderedContent = renderMarkdown(content);
+
+            messageDiv.innerHTML = `
+                <div class="message-avatar">${avatar}</div>
+                <div class="message-content markdown-content">${renderedContent}</div>
+            `;
+
+            chatMessages.appendChild(messageDiv);
+
+            // 渲染数学公式
+            if (window.renderMathInElement) {
+                window.renderMathInElement(messageDiv);
+            }
+            chatMessages.scrollTop = chatMessages.scrollHeight;
+        }
+
+        // 更新最后一条系统消息
+        function updateLastSystemMessage(content) {
+            const chatMessages = document.getElementById('chatMessages');
+            const systemMessages = chatMessages.querySelectorAll('.message.system');
+
+            if (systemMessages.length > 0) {
+                const lastSystemMessage = systemMessages[systemMessages.length - 1];
+                const messageContent = lastSystemMessage.querySelector('.message-content');
+
+                // 渲染Markdown内容
+                const renderedContent = renderMarkdown(content);
+                messageContent.innerHTML = renderedContent;
+
+                // 渲染数学公式
+                if (window.renderMathInElement) {
+                    window.renderMathInElement(messageContent);
+                }
+            }
+        }
+
+        // 生成题目
+        async function generateQuestions() {
+            if (isGenerating) {
+                console.log('题目生成中，跳过重复请求');
+                return;
+            }
+
+            isGenerating = true;
+
+            // 显示加载状态
+            showLoadingState('正在生成题目，请稍候...');
+            addMessage('正在为您生成题目，请稍候...', 'system');
+
+            try {
+                // 验证选择的题型
+                if (!selectedQuestionTypes || Object.keys(selectedQuestionTypes).length === 0) {
+                    throw new Error('请先选择题目类型');
+                }
+
+                // 构建题型要求文本
+                let requirementText = '请生成以下题目：';
+                Object.values(selectedQuestionTypes).forEach(type => {
+                    requirementText += type.count + '道' + type.name + '、';
+                });
+                requirementText = requirementText.slice(0, -1);
+
+                // 构建请求数据
+                const requestData = {
+                    selected_types: selectedQuestionTypes,
+                    preferences: userPreferences || '',
+                    requirement_text: requirementText
+                };
+
+                console.log('发送请求数据:', requestData);
+
+                // 增加超时控制
+                const controller = new AbortController();
+                const timeoutId = setTimeout(() => {
+                    controller.abort();
+                    console.log('请求超时，已取消');
+                }, 60000); // 60秒超时
+
+                const response = await fetch('/questions/generate-structured/', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                        'X-CSRFToken': getCookie('csrftoken'),
+                    },
+                    credentials: 'same-origin',
+                    signal: controller.signal,
+                    body: JSON.stringify(requestData)
+                });
+
+                clearTimeout(timeoutId);
+
+                if (!response.ok) {
+                    throw new Error(`服务器响应错误: ${response.status}`);
+                }
+
+                const data = await response.json();
+                console.log('收到响应数据:', data);
+
+                if (data.success) {
+                    currentQuestions = data.questions || [];
+                    currentQuestionIndex = 0;
+
+                    if (currentQuestions.length > 0) {
+                        displayQuestionsOneByOne();
+                        const summaryMessage = data.questions_summary || `成功生成了 ${currentQuestions.length} 道题目！`;
+                        addMessage(summaryMessage, 'system');
+                    } else {
+                        throw new Error('未生成任何题目，请检查笔记内容');
+                    }
+                } else {
+                    throw new Error(data.error || '生成题目失败');
+                }
+
+            } catch (error) {
+                console.error('生成题目失败:', error);
+
+                let errorMessage = error.message;
+                let errorDetails = '';
+
+                // 处理不同类型的错误
+                if (error.name === 'AbortError') {
+                    errorMessage = '请求超时，请检查网络连接';
+                    errorDetails = '题目生成需要一些时间，请确保网络连接稳定';
+                } else if (error.message.includes('Connection') || error.message.includes('connection')) {
+                    errorMessage = 'API连接失败，使用模拟响应';
+                    errorDetails = '网络连接可能不稳定，系统已提供备用题目';
+                } else if (error.message.includes('Failed to fetch')) {
+                    errorMessage = '网络请求失败';
+                    errorDetails = '请检查网络连接或稍后重试';
+                }
+
+                showErrorMessage(errorMessage);
+
+                // 更新UI显示错误状态
+                const questionsContent = document.getElementById('questionsContent');
+                if (questionsContent) {
+                    questionsContent.innerHTML = `
+                        <div class="preparing-message">
+                            <div>❌ 生成题目失败</div>
+                            <div style="font-size: 0.9rem; color: #666; margin-top: 0.5rem;">${errorMessage}</div>
+                            ${errorDetails ? `<div style="font-size: 0.8rem; color: #999; margin-top: 0.3rem;">${errorDetails}</div>` : ''}
+                            <button class="confirm-btn" onclick="generateQuestions()" style="margin-top: 1rem;">重试</button>
+                            <button class="confirm-btn" onclick="debugAPI()" style="margin-top: 0.5rem; margin-left: 0.5rem; background: #6c757d;">调试信息</button>
+                        </div>
+                    `;
+                }
+            } finally {
+                isGenerating = false;
+            }
+        }
+
+        // 逐一显示题目
+        function displayQuestionsOneByOne() {
+            const questionsContent = document.getElementById('questionsContent');
+
+            if (!currentQuestions || currentQuestions.length === 0) {
+                questionsContent.innerHTML = `
+                    <div class="preparing-message">
+                        <div>暂无题目</div>
+                    </div>
+                `;
+                return;
+            }
+
+            // 显示当前题目
+            displayCurrentQuestion();
+        }
+
+        // 显示当前题目
+        function displayCurrentQuestion() {
+            const questionsContent = document.getElementById('questionsContent');
+
+            if (currentQuestionIndex >= currentQuestions.length) {
+                questionsContent.innerHTML = `
+                    <div class="preparing-message">
+                        <div>🎉 所有题目已完成！</div>
+                        <div style="font-size: 0.9rem; color: #666;">您已完成所有 ${currentQuestions.length} 道题目</div>
+                        <button class="confirm-btn" onclick="restartQuestions()" style="margin-top: 1rem;">重新开始</button>
+                    </div>
+                `;
+                return;
+            }
+
+            const question = currentQuestions[currentQuestionIndex];
+            let html = `
+                <div class="question-card" id="question-${currentQuestionIndex}">
+                    <div class="question-header">
+                        <span class="question-type">${question.type || '题目'}</span>
+                        <span>第 ${currentQuestionIndex + 1} 题 / 共 ${currentQuestions.length} 题</span>
+                    </div>
+                    <div class="question-text">${question.text}</div>
+            `;
+
+            if (question.options && question.options.length > 0) {
+                html += '<div class="question-options">';
+                question.options.forEach((option, optionIndex) => {
+                    html += '<div class="option" onclick="selectOption(' + currentQuestionIndex + ', ' + optionIndex + ')">' + option + '</div>';
+                });
+                html += '</div>';
+            } else {
+                // 填空题或简答题
+                html += '<textarea class="answer-input" placeholder="请输入您的答案..." rows="3"></textarea>';
+            }
+
+            // 添加题目导航
+            html += '<div class="question-navigation" style="margin: 1rem 0; text-align: center;">';
+
+            // 题目进度指示器
+            html += '<div class="question-progress" style="margin-bottom: 1rem;">';
+            for (let i = 0; i < currentQuestions.length; i++) {
+                const isActive = i === currentQuestionIndex;
+                const progressClass = isActive ? 'active' : '';
+                html += `<span class="progress-dot ${progressClass}" onclick="goToQuestion(${i})" style="
+                    display: inline-block;
+                    width: 30px;
+                    height: 30px;
+                    line-height: 30px;
+                    text-align: center;
+                    margin: 0 2px;
+                    border-radius: 50%;
+                    background: ${isActive ? '#007bff' : '#e9ecef'};
+                    color: ${isActive ? 'white' : '#6c757d'};
+                    cursor: pointer;
+                    font-size: 12px;
+                    border: 1px solid ${isActive ? '#007bff' : '#dee2e6'};
+                ">${i + 1}</span>`;
+            }
+            html += '</div>';
+
+            html += `
+                    <div class="question-actions">
+                        <button class="submit-answer-btn" onclick="showAnswer(${currentQuestionIndex})">查看答案</button>
+                    </div>
+
+                    <!-- 导航按钮 -->
+                    <div class="navigation-buttons" style="margin-top: 1rem; text-align: center;">
+                        <button class="submit-answer-btn" onclick="previousQuestion()"
+                                ${currentQuestionIndex === 0 ? 'disabled style="opacity: 0.5;"' : ''}>
+                            ← 上一题
+                        </button>
+                        <button class="submit-answer-btn" onclick="nextQuestion()" style="margin-left: 0.5rem;">
+                            ${currentQuestionIndex === currentQuestions.length - 1 ? '完成答题' : '下一题 →'}
+                        </button>
+                    </div>
+
+                    <div class="answer-section" id="answer-${currentQuestionIndex}" style="display: none;">
+                        <div class="correct-answer">正确答案: ${question.answer}</div>
+                        <div class="explanation markdown-content">${question.explanation || '暂无解析'}</div>
+                        <div class="answer-actions" style="margin-top: 1rem; text-align: center;">
+                            <button class="submit-answer-btn" onclick="previousQuestion()"
+                                    ${currentQuestionIndex === 0 ? 'disabled style="opacity: 0.5;"' : ''}>
+                                ← 上一题
+                            </button>
+                            <button class="submit-answer-btn" onclick="nextQuestion()" style="margin-left: 0.5rem;">
+                                ${currentQuestionIndex === currentQuestions.length - 1 ? '完成答题' : '下一题 →'}
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            `;
+
+            questionsContent.innerHTML = html;
+
+            // 渲染数学公式
+            if (window.renderMathInElement) {
+                window.renderMathInElement(questionsContent);
+            }
+        }
+
+        // 下一题
+        function nextQuestion() {
+            if (currentQuestionIndex < currentQuestions.length - 1) {
+                currentQuestionIndex++;
+                displayCurrentQuestion();
+            } else {
+                // 所有题目完成
+                showCompletionMessage();
+            }
+        }
+
+        // 上一题
+        function previousQuestion() {
+            if (currentQuestionIndex > 0) {
+                currentQuestionIndex--;
+                displayCurrentQuestion();
+            }
+        }
+
+        // 跳转到指定题目
+        function goToQuestion(index) {
+            if (index >= 0 && index < currentQuestions.length) {
+                currentQuestionIndex = index;
+                displayCurrentQuestion();
+            }
+        }
+
+        // 显示完成消息
+        function showCompletionMessage() {
+            const questionsContent = document.getElementById('questionsContent');
+            if (questionsContent) {
+                questionsContent.innerHTML = `
+                    <div class="preparing-message">
+                        <div>🎉 恭喜完成所有题目！</div>
+                        <div style="font-size: 0.9rem; color: #666; margin-top: 0.5rem;">
+                            您已完成了 ${currentQuestions.length} 道题目
+                        </div>
+                        <div style="margin-top: 1rem;">
+                            <button class="confirm-btn" onclick="generateAnswerReport()" style="margin-right: 0.5rem;">查看答题报告</button>
+                            <button class="confirm-btn" onclick="location.reload()">重新开始</button>
+                        </div>
+                    </div>
+                `;
+            }
+        }
+
+        // 重新开始
+        function restartQuestions() {
+            currentQuestionIndex = 0;
+            location.reload(); // 刷新页面重新开始
+        }
+
+        // 选择选项
+        function selectOption(questionIndex, optionIndex) {
+            const questionCard = document.getElementById('question-' + questionIndex);
+            if (!questionCard) return;
+
+            const options = questionCard.querySelectorAll('.option');
+            const selectedOption = options[optionIndex];
+            const question = currentQuestions[questionIndex];
+
+            // 清除之前的选择状态
+            options.forEach(option => {
+                option.classList.remove('selected', 'correct', 'incorrect');
+            });
+
+            // 标记当前选择
+            selectedOption.classList.add('selected');
+
+            // 检查答案
+            const userAnswer = selectedOption.textContent.trim();
+            const correctAnswer = question.answer;
+            const isCorrect = checkAnswer(userAnswer, correctAnswer, question.type);
+
+            // 显示正确/错误效果
+            setTimeout(() => {
+                if (isCorrect) {
+                    selectedOption.classList.remove('selected');
+                    selectedOption.classList.add('correct');
+                } else {
+                    selectedOption.classList.remove('selected');
+                    selectedOption.classList.add('incorrect');
+
+                    // 同时高亮正确答案
+                    options.forEach(option => {
+                        if (checkAnswer(option.textContent.trim(), correctAnswer, question.type)) {
+                            option.classList.add('correct');
+                        }
+                    });
+                }
+
+                // 禁用所有选项
+                options.forEach(option => {
+                    option.classList.add('disabled');
+                });
+
+                // 显示解析
+                showAnswerExplanation(questionIndex, isCorrect);
+
+            }, 300); // 延迟300ms显示结果，让用户看到选择效果
+        }
+
+        // 简化的Markdown渲染器
+        function renderMarkdown(text) {
+            if (!text) return text;
+
+            // 先处理换行
+            let result = text.replace(/\n/g, '<br>');
+
+            // 处理标题
+            result = result.replace(/^### (.*?)(<br>|$)/gm, '<h3>$1</h3>$2');
+            result = result.replace(/^## (.*?)(<br>|$)/gm, '<h2>$1</h2>$2');
+            result = result.replace(/^# (.*?)(<br>|$)/gm, '<h1>$1</h1>$2');
+
+            // 处理粗体
+            result = result.replace(/\*\*(.*?)\*\*/g, '<strong>$1</strong>');
+
+            // 处理斜体
+            result = result.replace(/(?<!\*)\*([^*]+?)\*(?!\*)/g, '<em>$1</em>');
+
+            // 处理代码
+            result = result.replace(/`([^`]+?)`/g, '<code>$1</code>');
+
+            // 处理列表项
+            result = result.replace(/^[\*\-] (.*?)(<br>|$)/gm, '<li>$1</li>$2');
+
+            // 处理引用
+            result = result.replace(/^> (.*?)(<br>|$)/gm, '<blockquote>$1</blockquote>$2');
+
+            return result;
+        }
+
+        // 显示答案解析
+        function showAnswerExplanation(questionIndex, isCorrect) {
+            const question = currentQuestions[questionIndex];
+            const answerSection = document.getElementById('answer-' + questionIndex);
+
+            if (answerSection) {
+                // 更新答案区域内容
+                const resultIcon = isCorrect ? '✅' : '❌';
+                const resultText = isCorrect ? '回答正确！' : '回答错误';
+                const resultColor = isCorrect ? '#4caf50' : '#f44336';
+
+                // 渲染Markdown内容
+                const renderedExplanation = renderMarkdown(question.explanation || '暂无解析');
+
+                answerSection.innerHTML = `
+                    <div style="color: ${resultColor}; font-weight: bold; margin-bottom: 0.5rem;">
+                        ${resultIcon} ${resultText}
+                    </div>
+                    <div class="correct-answer">正确答案: ${question.answer}</div>
+                    <div class="explanation markdown-content">${renderedExplanation}</div>
+                    <div class="answer-actions" style="margin-top: 1rem; text-align: center;">
+                        <button class="submit-answer-btn" onclick="nextQuestion()">下一题</button>
+                    </div>
+                `;
+
+                // 渲染数学公式
+                if (window.renderMathInElement) {
+                    window.renderMathInElement(answerSection);
+                }
+                answerSection.style.display = 'block';
+
+                // 添加到聊天记录
+                let feedback = '第' + (questionIndex + 1) + '题：' + resultText;
+                if (question.explanation) {
+                    feedback += ' ' + question.explanation;
+                }
+                addMessage(feedback, 'system');
+            }
+        }
+
+        // 提交答案（保留用于填空题和简答题）
+        function submitAnswer(questionIndex, userAnswer) {
+            const question = currentQuestions[questionIndex];
+
+            // 提交答案到服务器
+            submitAnswerToServer(question, userAnswer, questionIndex);
+        }
+
+        // 提交答案到服务器
+        async function submitAnswerToServer(question, userAnswer, questionIndex = null) {
+            try {
+                const sessionId = generateSessionId();
+                const index = questionIndex !== null ? questionIndex : currentQuestionIndex;
+
+                const submitData = {
+                    session_id: sessionId,
+                    question_index: index,
+                    question_type: question.type,
+                    question_text: question.text,
+                    user_answer: userAnswer,
+                    correct_answer: question.answer,
+                    time_spent: 0 // 可以后续添加计时功能
+                };
+
+                const response = await fetch('/questions/submit-answer/', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                        'X-CSRFToken': getCookie('csrftoken'),
+                    },
+                    credentials: 'same-origin',
+                    body: JSON.stringify(submitData)
+                });
+
+                if (response.ok) {
+                    const result = await response.json();
+                    if (result.success) {
+                        // 显示答案和解析
+                        const isCorrect = result.is_correct;
+                        showAnswerExplanation(index, isCorrect);
+
+                        // 在左侧对话框显示解析
+                        addMessage(result.explanation, 'system');
+                    } else {
+                        console.error('提交答案失败:', result.error);
+                        // 备用处理
+                        const isCorrect = checkAnswer(userAnswer, question.answer, question.type);
+                        showAnswerExplanation(index, isCorrect);
+                    }
+                } else {
+                    console.error('提交答案请求失败:', response.status);
+                    // 备用处理
+                    const isCorrect = checkAnswer(userAnswer, question.answer, question.type);
+                    showAnswerExplanation(index, isCorrect);
+                }
+            } catch (error) {
+                console.error('提交答案异常:', error);
+                // 备用处理
+                const isCorrect = checkAnswer(userAnswer, question.answer, question.type);
+                showAnswerExplanation(questionIndex !== null ? questionIndex : currentQuestionIndex, isCorrect);
+            }
+        }
+
+        // 生成会话ID
+        function generateSessionId() {
+            if (!window.currentSessionId) {
+                window.currentSessionId = 'session_' + Date.now() + '_' + Math.random().toString(36).substr(2, 9);
+            }
+            return window.currentSessionId;
+        }
+
+        // 生成答题报告
+        async function generateAnswerReport() {
+            try {
+                const sessionId = generateSessionId();
+
+                const response = await fetch('/questions/generate-report/', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                        'X-CSRFToken': getCookie('csrftoken'),
+                    },
+                    credentials: 'same-origin',
+                    body: JSON.stringify({
+                        session_id: sessionId
+                    })
+                });
+
+                if (response.ok) {
+                    const result = await response.json();
+                    if (result.success) {
+                        displayAnswerReport(result.report);
+                    } else {
+                        // 如果没有答题记录，提示用户先答题
+                        if (result.error && result.error.includes('未找到答题记录')) {
+                            addMessage('📝 还没有答题记录，请先完成题目后再查看报告', 'system');
+                            addMessage('💡 提示：您可以先生成题目并作答，然后再查看答题报告', 'system');
+                        } else {
+                            addMessage('❌ 生成答题报告失败：' + result.error, 'system');
+                        }
+
+                        // 显示调试信息（如果有）
+                        if (result.debug_info) {
+                            console.log('答题报告调试信息:', result.debug_info);
+                        }
+                    }
+                } else {
+                    addMessage('❌ 生成答题报告失败，请稍后重试', 'system');
+                }
+            } catch (error) {
+                console.error('生成答题报告异常:', error);
+                addMessage('❌ 生成答题报告失败，请稍后重试', 'system');
+            }
+        }
+
+        // 显示答题报告
+        function displayAnswerReport(report) {
+            const summary = report.summary;
+            const accuracy = summary.accuracy || 0;
+
+            let reportMessage = `📊 **答题报告**\n\n`;
+            reportMessage += `📈 **总体表现**\n`;
+            reportMessage += `- 总题数：${summary.total_questions}道\n`;
+            reportMessage += `- 正确题数：${summary.correct_count}道\n`;
+            reportMessage += `- 正确率：${accuracy}%\n\n`;
+
+            if (summary.type_stats && Object.keys(summary.type_stats).length > 0) {
+                reportMessage += `📋 **各题型表现**\n`;
+                for (const [type, stats] of Object.entries(summary.type_stats)) {
+                    const typeAccuracy = stats.total > 0 ? (stats.correct / stats.total * 100).toFixed(1) : 0;
+                    reportMessage += `- ${type}：${stats.correct}/${stats.total} (${typeAccuracy}%)\n`;
+                }
+                reportMessage += `\n`;
+            }
+
+            if (report.ai_analysis) {
+                reportMessage += `🤖 **AI分析**\n${report.ai_analysis}\n\n`;
+            }
+
+            if (report.weak_points && report.weak_points.length > 0) {
+                reportMessage += `⚠️ **需要加强的题目**\n`;
+                report.weak_points.forEach((point, index) => {
+                    reportMessage += `${index + 1}. ${point.question.substring(0, 50)}...\n`;
+                });
+                reportMessage += `\n`;
+            }
+
+            if (report.recommendations && report.recommendations.length > 0) {
+                reportMessage += `💡 **学习建议**\n`;
+                report.recommendations.forEach((rec, index) => {
+                    reportMessage += `${index + 1}. ${rec}\n`;
+                });
+            }
+
+            addMessage(reportMessage, 'system');
+        }
+
+        // 检查答案
+        function checkAnswer(userAnswer, correctAnswer, questionType) {
+            if (!userAnswer) return false;
+
+            userAnswer = userAnswer.trim().toLowerCase();
+            correctAnswer = correctAnswer.trim().toLowerCase();
+
+            if (questionType === '选择题') {
+                // 提取选项字母
+                const userOption = userAnswer.match(/^([abcd])/);
+                const correctOption = correctAnswer.match(/^([abcd])/);
+
+                if (userOption && correctOption) {
+                    return userOption[1] === correctOption[1];
+                }
+            }
+
+            return userAnswer === correctAnswer || userAnswer.includes(correctAnswer);
+        }
+
+        // 显示答案
+        function showAnswer(questionIndex) {
+            const answerSection = document.getElementById('answer-' + questionIndex);
+            answerSection.style.display = answerSection.style.display === 'none' ? 'block' : 'none';
+        }
+
+        // 处理回车键发送消息
+        document.getElementById('chatInput').addEventListener('keypress', function(e) {
+            if (e.key === 'Enter' && !e.shiftKey) {
+                e.preventDefault();
+                sendMessage();
+            }
+        });
+
+
+
+        // 检查用户状态
+        async function checkUserStatus() {
+            try {
+                console.log('检查用户登录状态...');
+                const response = await fetch('/users/api/current-user/', {
+                    method: 'GET',
+                    credentials: 'same-origin',
+                    headers: {
+                        'X-CSRFToken': getCookie('csrftoken'),
+                        'Content-Type': 'application/json',
+                    }
+                });
+
+                if (response.ok) {
+                    const data = await response.json();
+                    console.log('用户状态响应:', data);
+                    const userInfo = document.getElementById('userInfo');
+
+                    if (data.success && data.user && data.user.is_authenticated) {
+                        console.log('用户已登录:', data.user.username);
+                        // 设置全局用户ID
+                        window.currentUserId = data.user.id;
+
+                        userInfo.textContent = '欢迎，' + data.user.username;
+                    } else {
+                        console.log('用户未登录，检查游客模式');
+                        // 设置默认用户ID
+                        window.currentUserId = '1';
+
+                        // 检查是否是游客模式（检查服务器端返回的信息或sessionStorage）
+                        if (data.user && data.user.is_guest) {
+                            userInfo.textContent = '游客模式';
+                        } else if (sessionStorage.getItem('guestMode') === 'true') {
+                            userInfo.textContent = '游客模式';
+                        } else {
+                            // 如果既不是登录用户也不是游客，重定向到登录页面
+                            console.log('既不是登录用户也不是游客模式，重定向到登录页面');
+                            window.location.href = '/login/';
+                            return;
+                        }
+                    }
+                } else {
+                    console.error('获取用户状态失败:', response.status);
+                }
+            } catch (error) {
+                console.error('检查用户状态失败:', error);
+                // 默认显示游客模式
+                document.getElementById('userInfo').textContent = '游客模式';
+                window.currentUserId = '1';
+            }
+        }
+
+        // 处理退出登录
+        async function handleLogout() {
+            try {
+                // 如果是游客模式，直接清除并跳转
+                if (sessionStorage.getItem('guestMode') === 'true') {
+                    sessionStorage.removeItem('guestMode');
+                    window.location.href = '/login/';
+                    return;
+                }
+
+                // 正常用户退出登录
+                const response = await fetch('/users/api/logout/', {
+                    method: 'POST',
+                    credentials: 'same-origin',
+                    headers: {
+                        'Content-Type': 'application/json',
+                        'X-CSRFToken': getCookie('csrftoken'),
+                    }
+                });
+
+                const data = await response.json();
+                if (data.success) {
+                    window.location.href = '/login/';
+                }
+            } catch (error) {
+                console.error('退出登录失败:', error);
+                // 即使失败也跳转到登录页面
+                window.location.href = '/login/';
+            }
+        }
+
+        // 退出登录
+        async function logout() {
+            try {
+                const response = await fetch('/users/api/logout/', {
+                    method: 'POST',
+                    credentials: 'same-origin',
+                    headers: {
+                        'X-CSRFToken': getCookie('csrftoken'),
+                        'Content-Type': 'application/json',
+                    }
+                });
+
+                const data = await response.json();
+                if (data.success) {
+                    window.location.reload();
+                }
+            } catch (error) {
+                console.error('退出登录失败:', error);
+            }
+        }
+
+        // getCookie函数已在上面定义，这里删除重复定义
+
+        // 调试：确认所有函数已定义
+        console.log('所有JavaScript函数定义完成');
+        console.log('toggleQuestionCount 函数:', typeof toggleQuestionCount);
+        console.log('startQuestionGeneration 函数:', typeof startQuestionGeneration);
+        console.log('checkUserStatus 函数:', typeof checkUserStatus);
+
+        // 添加变量检查函数
+        window.checkVariables = function() {
+            console.log('🔍 检查全局变量状态:');
+            console.log('selectedQuestionTypes:', selectedQuestionTypes);
+            console.log('userPreferences:', userPreferences);
+            console.log('isGenerating:', isGenerating);
+            console.log('currentQuestions:', currentQuestions);
+            console.log('currentQuestionIndex:', currentQuestionIndex);
+        };
+
+        // 添加详细调试函数
+        window.debugAPI = async function() {
+            console.log('🔧 开始详细调试API...');
+
+            // 检查全局变量
+            console.log('全局变量状态:');
+            console.log('- selectedQuestionTypes:', selectedQuestionTypes);
+            console.log('- userPreferences:', userPreferences);
+            console.log('- isGenerating:', isGenerating);
+
+            const testData = {
+                "selected_types": {
+                    "multipleChoice": {
+                        "name": "选择题",
+                        "count": 1
+                    }
+                },
+                "preferences": "请生成基础难度的题目",
+                "requirement_text": "请生成1道选择题"
+            };
+
+            console.log('测试数据:', testData);
+            console.log('JSON字符串:', JSON.stringify(testData));
+
+            // 检查CSRF token
+            const csrfToken = getCookie('csrftoken');
+            console.log('CSRF token:', csrfToken ? csrfToken.substring(0, 20) + '...' : 'null');
+
+            try {
+                console.log('发送请求...');
+                const response = await fetch('/questions/generate-structured/', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                        'X-CSRFToken': csrfToken,
+                    },
+                    credentials: 'same-origin',
+                    body: JSON.stringify(testData)
+                });
+
+                console.log('响应状态:', response.status);
+                console.log('响应状态文本:', response.statusText);
+                console.log('响应头:', Object.fromEntries(response.headers.entries()));
+
+                if (response.ok) {
+                    const data = await response.json();
+                    console.log('✅ API调试成功:', data);
+                    return data;
+                } else {
+                    console.log('❌ API调试失败 - 状态码:', response.status);
+
+                    // 尝试获取错误详情
+                    try {
+                        const errorJson = await response.json();
+                        console.log('错误JSON:', errorJson);
+                    } catch {
+                        const errorText = await response.text();
+                        console.log('错误文本:', errorText);
+                    }
+                    return null;
+                }
+            } catch (error) {
+                console.log('❌ API调试异常:', error);
+                console.log('异常详情:', error.message);
+                console.log('异常堆栈:', error.stack);
+                return null;
+            }
+        };
+
+        // 添加模拟正常流程的函数
+        window.simulateNormalFlow = async function() {
+            console.log('🎯 模拟正常出题流程...');
+
+            // 模拟设置选择的题型
+            selectedQuestionTypes = {
+                "multipleChoice": {
+                    "name": "选择题",
+                    "count": 1
+                }
+            };
+
+            userPreferences = "请生成基础难度的题目";
+
+            console.log('设置的变量:', {
+                selectedQuestionTypes,
+                userPreferences
+            });
+
+            // 调用实际的生成函数
+            try {
+                await generateQuestions();
+                console.log('✅ 模拟流程完成');
+            } catch (error) {
+                console.log('❌ 模拟流程失败:', error);
+            }
+        };
+
+        // 添加用户ID检查函数
+        window.checkUserId = async function() {
+            console.log('🔍 检查当前用户ID...');
+
+            try {
+                const response = await fetch('/questions/generate-structured/', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                        'X-CSRFToken': getCookie('csrftoken'),
+                    },
+                    credentials: 'same-origin',
+                    body: JSON.stringify({
+                        "debug_mode": true,
+                        "selected_types": {
+                            "multipleChoice": {
+                                "name": "选择题",
+                                "count": 1
+                            }
+                        }
+                    })
+                });
+
+                console.log('调试响应状态:', response.status);
+                const result = await response.text();
+                console.log('调试响应内容:', result);
+
+            } catch (error) {
+                console.log('调试请求异常:', error);
+            }
+        };
+
+        // 添加用户状态检查函数
+        window.checkUserAuth = async function() {
+            console.log('🔍 检查用户认证状态...');
+
+            try {
+                const response = await fetch('/users/api/current-user/', {
+                    method: 'GET',
+                    credentials: 'same-origin',
+                    headers: {
+                        'Content-Type': 'application/json',
+                    }
+                });
+
+                console.log('用户API响应:', response.status);
+
+                if (response.ok) {
+                    const userData = await response.json();
+                    console.log('用户数据:', userData);
+                } else {
+                    console.log('用户未认证或API错误');
+                }
+            } catch (error) {
+                console.log('用户状态检查异常:', error);
+            }
+        };
+
+        // 添加测试答题记录函数
+        window.createTestAnswerRecord = async function() {
+            console.log('🧪 创建测试答题记录...');
+
+            const sessionId = generateSessionId();
+            console.log('使用session_id:', sessionId);
+
+            // 创建测试答题记录
+            const testAnswers = [
+                {
+                    session_id: sessionId,
+                    question_index: 0,
+                    question_type: '选择题',
+                    question_text: '测试题目1',
+                    user_answer: 'A',
+                    correct_answer: 'A',
+                    time_spent: 30
+                },
+                {
+                    session_id: sessionId,
+                    question_index: 1,
+                    question_type: '选择题',
+                    question_text: '测试题目2',
+                    user_answer: 'B',
+                    correct_answer: 'C',
+                    time_spent: 45
+                }
+            ];
+
+            // 提交测试答案
+            for (let i = 0; i < testAnswers.length; i++) {
+                try {
+                    const response = await fetch('/questions/submit-answer/', {
+                        method: 'POST',
+                        headers: {
+                            'Content-Type': 'application/json',
+                            'X-CSRFToken': getCookie('csrftoken'),
+                        },
+                        credentials: 'same-origin',
+                        body: JSON.stringify(testAnswers[i])
+                    });
+
+                    const result = await response.json();
+                    console.log(`测试答案${i+1}提交结果:`, result);
+                } catch (error) {
+                    console.log(`测试答案${i+1}提交失败:`, error);
+                }
+            }
+
+            console.log('✅ 测试答题记录创建完成，现在可以测试答题报告了');
+        };
+
+        console.log('调试函数已添加:');
+        console.log('- debugAPI(): 详细测试API');
+        console.log('- checkVariables(): 检查变量状态');
+        console.log('- simulateNormalFlow(): 模拟正常流程');
+        console.log('- checkUserAuth(): 检查用户认证状态');
+        console.log('- createTestAnswerRecord(): 创建测试答题记录');
+
+        // 页面加载完成后初始化
+        document.addEventListener('DOMContentLoaded', function() {
+            console.log('DOM加载完成，开始初始化...');
+
+            // 等待一小段时间确保所有元素都已渲染
+            setTimeout(function() {
+                // 初始化题型控制（简化版）
+                const types = ['multipleChoice', 'fillBlank', 'trueOrFalse', 'shortAnswer'];
+                types.forEach(type => {
+                    try {
+                        // 检查函数是否存在
+                        if (typeof toggleQuestionCount === 'function') {
+                            // 初始化时触发一次切换函数，确保状态正确
+                            toggleQuestionCount(type);
+                        } else {
+                            console.error('toggleQuestionCount 函数未定义');
+                        }
+                    } catch (error) {
+                        console.error('初始化题型控制失败:', type, error);
+                    }
+                });
+
+                try {
+                    if (typeof checkUserStatus === 'function') {
+                        checkUserStatus();
+                        console.log('用户状态检查完成');
+                    } else {
+                        console.error('checkUserStatus 函数未定义');
+                    }
+                } catch (error) {
+                    console.error('用户状态检查失败:', error);
+                }
+
+                console.log('页面初始化完成');
+            }, 100); // 延迟100毫秒
+        });
+    </script>
+</body>
+</html>

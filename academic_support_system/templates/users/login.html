@@ -1,0 +1,369 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>登录 - 知悟·启明学业问答系统</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+        
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Roboto', 'Helvetica Neue', Arial, sans-serif;
+            background: #212121;
+            color: #e8eaed;
+            min-height: 100vh;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
+        
+        .login-container {
+            background: #2f2f2f;
+            border-radius: 1rem;
+            padding: 2rem;
+            width: 100%;
+            max-width: 400px;
+            border: 1px solid #404040;
+        }
+        
+        .login-header {
+            text-align: center;
+            margin-bottom: 2rem;
+        }
+        
+        .login-title {
+            font-size: 1.5rem;
+            font-weight: 600;
+            margin-bottom: 0.5rem;
+        }
+        
+        .login-subtitle {
+            color: #999;
+            font-size: 0.9rem;
+        }
+        
+        .form-group {
+            margin-bottom: 1.5rem;
+        }
+        
+        .form-label {
+            display: block;
+            margin-bottom: 0.5rem;
+            font-weight: 500;
+            color: #e8eaed;
+        }
+        
+        .form-input {
+            width: 100%;
+            padding: 0.75rem;
+            border: 1px solid #555;
+            border-radius: 0.5rem;
+            background: #404040;
+            color: #e8eaed;
+            font-size: 0.9rem;
+            transition: border-color 0.2s ease;
+        }
+        
+        .form-input:focus {
+            outline: none;
+            border-color: #0084ff;
+        }
+        
+        .form-input::placeholder {
+            color: #999;
+        }
+        
+        .btn {
+            width: 100%;
+            padding: 0.75rem;
+            border: none;
+            border-radius: 0.5rem;
+            font-size: 0.9rem;
+            font-weight: 500;
+            cursor: pointer;
+            transition: all 0.2s ease;
+        }
+        
+        .btn-primary {
+            background: #0084ff;
+            color: white;
+        }
+        
+        .btn-primary:hover {
+            background: #0066cc;
+        }
+        
+        .btn-secondary {
+            background: #404040;
+            color: #e8eaed;
+            border: 1px solid #555;
+            margin-top: 0.5rem;
+        }
+        
+        .btn-secondary:hover {
+            background: #4a4a4a;
+        }
+        
+        .form-footer {
+            text-align: center;
+            margin-top: 1.5rem;
+            padding-top: 1.5rem;
+            border-top: 1px solid #404040;
+        }
+        
+        .form-footer a {
+            color: #0084ff;
+            text-decoration: none;
+            font-size: 0.9rem;
+        }
+        
+        .form-footer a:hover {
+            text-decoration: underline;
+        }
+        
+        .error-message {
+            background: #ff4444;
+            color: white;
+            padding: 0.75rem;
+            border-radius: 0.5rem;
+            margin-bottom: 1rem;
+            font-size: 0.9rem;
+            display: none;
+        }
+        
+        .success-message {
+            background: #44ff44;
+            color: #000;
+            padding: 0.75rem;
+            border-radius: 0.5rem;
+            margin-bottom: 1rem;
+            font-size: 0.9rem;
+            display: none;
+        }
+        
+        .tab-container {
+            display: flex;
+            margin-bottom: 2rem;
+            background: #404040;
+            border-radius: 0.5rem;
+            padding: 0.25rem;
+        }
+        
+        .tab {
+            flex: 1;
+            padding: 0.5rem;
+            text-align: center;
+            cursor: pointer;
+            border-radius: 0.375rem;
+            transition: all 0.2s ease;
+            font-size: 0.9rem;
+        }
+        
+        .tab.active {
+            background: #0084ff;
+            color: white;
+        }
+        
+        .tab:not(.active) {
+            color: #999;
+        }
+        
+        .tab:not(.active):hover {
+            color: #e8eaed;
+        }
+    </style>
+</head>
+<body>
+    <div class="login-container">
+        <div class="login-header">
+            <h1 class="login-title">知悟·启明学业问答系统</h1>
+            <p class="login-subtitle">登录或注册以保存您的学习进度</p>
+        </div>
+        
+        <div class="tab-container">
+            <div class="tab active" onclick="switchTab('login')">登录</div>
+            <div class="tab" onclick="switchTab('register')">注册</div>
+        </div>
+        
+        <div id="error-message" class="error-message"></div>
+        <div id="success-message" class="success-message"></div>
+        
+        <!-- 登录表单 -->
+        <form id="login-form" style="display: block;">
+            <div class="form-group">
+                <label class="form-label" for="login-username">用户名</label>
+                <input type="text" id="login-username" class="form-input" placeholder="请输入用户名" required>
+            </div>
+            
+            <div class="form-group">
+                <label class="form-label" for="login-password">密码</label>
+                <input type="password" id="login-password" class="form-input" placeholder="请输入密码" required>
+            </div>
+            
+            <button type="submit" class="btn btn-primary">登录</button>
+            <button type="button" class="btn btn-secondary" onclick="guestLogin()">游客模式</button>
+        </form>
+        
+        <!-- 注册表单 -->
+        <form id="register-form" style="display: none;">
+            <div class="form-group">
+                <label class="form-label" for="register-username">用户名</label>
+                <input type="text" id="register-username" class="form-input" placeholder="请输入用户名" required>
+            </div>
+            
+            <div class="form-group">
+                <label class="form-label" for="register-email">邮箱（可选）</label>
+                <input type="email" id="register-email" class="form-input" placeholder="请输入邮箱">
+            </div>
+            
+            <div class="form-group">
+                <label class="form-label" for="register-password">密码</label>
+                <input type="password" id="register-password" class="form-input" placeholder="请输入密码" required>
+            </div>
+            
+            <button type="submit" class="btn btn-primary">注册</button>
+            <button type="button" class="btn btn-secondary" onclick="guestLogin()">游客模式</button>
+        </form>
+        
+        <div class="form-footer">
+            <a href="/">返回主页</a>
+        </div>
+    </div>
+    
+    <script>
+        let currentTab = 'login';
+        
+        function switchTab(tab) {
+            currentTab = tab;
+            
+            // 更新标签样式
+            document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
+            document.querySelector(`.tab:nth-child(${tab === 'login' ? '1' : '2'})`).classList.add('active');
+            
+            // 切换表单
+            document.getElementById('login-form').style.display = tab === 'login' ? 'block' : 'none';
+            document.getElementById('register-form').style.display = tab === 'register' ? 'block' : 'none';
+            
+            // 清除消息
+            hideMessages();
+        }
+        
+        function showError(message) {
+            const errorDiv = document.getElementById('error-message');
+            errorDiv.textContent = message;
+            errorDiv.style.display = 'block';
+            document.getElementById('success-message').style.display = 'none';
+        }
+        
+        function showSuccess(message) {
+            const successDiv = document.getElementById('success-message');
+            successDiv.textContent = message;
+            successDiv.style.display = 'block';
+            document.getElementById('error-message').style.display = 'none';
+        }
+        
+        function hideMessages() {
+            document.getElementById('error-message').style.display = 'none';
+            document.getElementById('success-message').style.display = 'none';
+        }
+        
+        async function guestLogin() {
+            try {
+                // 设置游客模式
+                const response = await fetch('/users/api/guest-mode/', {
+                    method: 'POST',
+                    credentials: 'same-origin',
+                    headers: {
+                        'Content-Type': 'application/json',
+                        'X-CSRFToken': getCookie('csrftoken'),
+                    }
+                });
+
+                if (response.ok) {
+                    // 游客模式设置成功，跳转到出题页面
+                    window.location.href = '/questions/';
+                } else {
+                    // 如果API失败，直接跳转到主页
+                    window.location.href = '/';
+                }
+            } catch (error) {
+                console.error('设置游客模式失败:', error);
+                // 出错时直接跳转到主页
+                window.location.href = '/';
+            }
+        }
+        
+        // 登录表单提交
+        document.getElementById('login-form').addEventListener('submit', async function(e) {
+            e.preventDefault();
+            
+            const username = document.getElementById('login-username').value;
+            const password = document.getElementById('login-password').value;
+            
+            try {
+                const response = await fetch('/users/api/login/', {
+                    method: 'POST',
+                    credentials: 'same-origin',
+                    headers: {
+                        'Content-Type': 'application/json',
+                    },
+                    body: JSON.stringify({ username, password })
+                });
+                
+                const data = await response.json();
+                console.log('登录响应:', data);
+
+                if (data.success) {
+                    showSuccess('登录成功，正在跳转...');
+                    // 设置一个标记表示刚刚登录成功
+                    sessionStorage.setItem('justLoggedIn', 'true');
+                    setTimeout(() => {
+                        window.location.href = '/';
+                    }, 1000);
+                } else {
+                    showError(data.error || '登录失败');
+                }
+            } catch (error) {
+                showError('网络错误，请稍后重试');
+            }
+        });
+        
+        // 注册表单提交
+        document.getElementById('register-form').addEventListener('submit', async function(e) {
+            e.preventDefault();
+            
+            const username = document.getElementById('register-username').value;
+            const email = document.getElementById('register-email').value;
+            const password = document.getElementById('register-password').value;
+            
+            try {
+                const response = await fetch('/users/api/register/', {
+                    method: 'POST',
+                    credentials: 'same-origin',
+                    headers: {
+                        'Content-Type': 'application/json',
+                    },
+                    body: JSON.stringify({ username, email, password })
+                });
+                
+                const data = await response.json();
+                
+                if (data.success) {
+                    showSuccess('注册成功，正在跳转...');
+                    setTimeout(() => {
+                        window.location.href = '/';
+                    }, 1000);
+                } else {
+                    showError(data.error || '注册失败');
+                }
+            } catch (error) {
+                showError('网络错误，请稍后重试');
+            }
+        });
+    </script>
+</body>
+</html>
